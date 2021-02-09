@@ -8,7 +8,7 @@ import pandas as pd
 import pysam
 from tqdm import tqdm
 
-from segment import Segment
+from scripts.segment import Segment
 
 
 class SNP:

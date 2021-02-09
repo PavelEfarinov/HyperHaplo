@@ -4,9 +4,9 @@ from typing import Tuple, List, Set, Dict
 import pysam
 from tqdm import tqdm
 
-from data import SNP, GenomeReference, Haplotype
-from hedge import HEdge
-from metrics import normalize_freq
+from scripts.data import SNP, GenomeReference, Haplotype
+from scripts.hedge import HEdge
+from scripts.metrics import normalize_freq
 
 
 def create_hedges(
@@ -64,6 +64,7 @@ def create_hedges(
 
     for he in hedges:
         he.init_weight(hedges_weight[hash(he)])
+        print(hedges_weight[hash(he)], he.coverage.compressed_repr)
 
     return hedges
 

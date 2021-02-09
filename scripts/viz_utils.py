@@ -10,8 +10,8 @@ from bisect import bisect_left, bisect_right
 from collections import Counter, defaultdict
 from more_itertools import pairwise
 
-from data import SNP, Haplotype, get_snp_indeces
-from hedge import HEdge, SingleHEdge, PairedHEdge
+from scripts.data import SNP, Haplotype, get_snp_indeces
+from scripts.hedge import HEdge, SingleHEdge, PairedHEdge
 
 
 def reads_stats(bamfile_path: Path):

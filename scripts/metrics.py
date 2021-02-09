@@ -12,7 +12,7 @@ from collections import Counter, defaultdict
 from tqdm import tqdm
 import pysam
 from operator import eq
-from data import Haplotype
+from scripts.data import Haplotype
 
 
 def get_nucls_counter_from_haplos(haplos: List[Haplotype]):

@@ -12,7 +12,7 @@ from scripts.metrics import *
 @click.option('-ref', '--reference_name', type=str, default='pol_HXB2', help="Reference name.")
 @click.option('-bq', '--min_base_quality', type=int, default=0, help="Minimal base quality for position in SNP.")
 @click.option('-mq', '--min_mapping_quality', type=int, default=0, help="Minimal mapping quality for a read.")
-@click.option('-mc', '--min_minor_coverage', type=float, default=0.005, help="Minimal minor coverage to call SNP.")
+@click.option('-mc', '--min_minor_coverage', type=float, default=0.006, help="Minimal minor coverage to call SNP.")
 @click.option('-w', '--target_hedge_weight', type=int, default=3, help="Minimal weight for hedges.")
 @click.option('-cl', '--min_contig_length', type=int, default=0, help="Minimal length for contig to infer haplotype.")
 @click.option('-rl', '--min_relative_contig_length', type=float, default=0.0,

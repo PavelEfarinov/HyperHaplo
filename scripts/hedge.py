@@ -5,7 +5,7 @@ from typing import List, Optional, Dict, Tuple
 from collections import Counter, defaultdict
 from more_itertools import pairwise
 
-from segment import SegmentList, LocalSegmentIntersection
+from scripts.segment import SegmentList, LocalSegmentIntersection
 
 
 class Coverage:
@@ -89,6 +89,7 @@ class HEdge:
         self.snp2genome = snp2genome
         self.genome2snp = genome2snp
         self.weight = 0
+        self.count_snp = 0
         self.coverage = Coverage()
         self.frequency = 1
 
@@ -535,6 +536,7 @@ class SingleHEdge(HEdge):
         assert len(positions), 'Hyper Edge is empty'
 
         super().__init__(snp2genome, genome2snp)
+        self.count_snp = len(positions)
         self.positions = positions
         self.nucls = nucls
         self._hash = hash(frozenset(zip(self.positions, self.nucls)))
@@ -596,6 +598,7 @@ class PairedHEdge(HEdge):
         assert len(right_positions), 'Right part of PairedHEdge is empty'
 
         super().__init__(snp2genome, genome2snp)
+        self.count_snp = len(left_positions) + len(right_positions)
         self.left_positions = left_positions
         self.left_nucls = left_nucls
         self.right_positions = right_positions

@@ -6,8 +6,8 @@ from tqdm import tqdm
 import numpy as np
 # from sklearn.cluster import AgglomerativeClustering
 
-from hedge import HEdge
-from utils import DSU
+from scripts.hedge import HEdge
+from scripts.utils import DSU
 
 
 def create_hedge_connectivity_graph(hedges: List[HEdge]):
