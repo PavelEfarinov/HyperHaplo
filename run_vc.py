@@ -1,10 +1,10 @@
 import time
 import click
 
-from data import *
-from core import *
-from algo import *
-from metrics import *
+from scripts.data import *
+from scripts.core import *
+from scripts.algo import *
+from scripts.metrics import *
 
 
 @click.command()
