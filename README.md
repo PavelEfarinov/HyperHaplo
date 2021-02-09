@@ -1,28 +1,27 @@
-# Сборка гаплотипов вирусов
-Данная программа предназначена для сборки гаплотипов вирусов из одиночных или парных ридов.
+# HyperHaplo. Variant caller.
+The tool is programmed to find the haplotypes and percentage of each haplotype.
 
-Основная идея подхода заключается в использовании всех SNP каждого рида в риде единой структуры - **_гиперребра_**.
+The main approach is to use all the SNPs from each read, making them the vertices in a *_hyper_* graph. The hyperedges are the connections between different vertices. Each hyperedge should finally be a single haplotype.
 
-# Параметры 
-Программа запускается следующей командой:
+# Parameters 
+To run the tool use the following command:
 ```cmd
 python run_vc.py --bamfile_path reads.bam
 ```
 
+#### Essential parameters
+```-bam, --bamfile_path```  - a path to a file with reads.
 
-#### Обязательные параметры
-```-bam, --bamfile_path```  - путь к файлу с ридами.
+#### Extra parameters
+```-out, --output_folder``` - a path to the output folder. By default: current folder.
 
-#### Необязательные параметры
-```-out, --output_folder``` - папка для сохранения результатов. По умолчанию результаты сохраняются в текущей папке.
+``` -bq, --min_base_quality ``` - minimal quality of used reads.
 
-``` -bq, --min_base_quality ``` - минимальное используемое качество секвенированных нуклеотидов.
+``` -mq, --min_mapping_quality ``` - minimal quality of mapping used.
 
-``` -mq, --min_mapping_quality ``` - минимальное используемое качество выравнивания.
+``` -mc, --min_minor_coverage ``` - minimal minor haplotype coverage to differentiate it from the sequencing error.
 
-``` -mc, --min_minor_coverage ``` - минимальное отличное от мажорного покрытие позиции генома, считающегося достоверным SNP.
+``` -w, --target_hedge_weight ``` - minimal weight of hyperedges used.
 
-``` -w, --target_hedge_weight ``` - минимальный вес используемых гиперребер.
-
-``` -rl, --min_relative_contig_length``` - минимальный относительный размер покрытия вариабельного участка генома для целевых гаплотипов.
+``` -rl, --min_relative_contig_length``` - 
 
