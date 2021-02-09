@@ -1,0 +1,39 @@
+name: ngs
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - hisat2
+  - igv
+  - samtools
+  - bedtools
+  - fastqc
+  - blast-plus
+  - igvtools
+  - jupyter
+  - pysam
+  - autopep8
+  - tqdm
+  - path
+  - jupyter_nbextensions_configurator
+  - jupyter_contrib_nbextensions
+  - bcftools
+  - requests
+  - pandas
+  - seaborn
+  - matplotlib
+  - editdistance
+  - more-itertools
+  - textdistance
+  - biopython
+  - graphviz
+  - python-graphviz
+  - pytest
+  - cached-property
+  - scikit-learn
+  - click
+  - pyemd
+  - kallisto
+prefix: /home/roman/miniconda3/envs/ngs
+
