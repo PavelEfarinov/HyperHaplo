@@ -9,6 +9,25 @@ from scripts.hedge import HEdge
 from scripts.metrics import normalize_freq
 
 
+def init_frequencies(hedges: List[HEdge]):
+    snp_to_hedges = defaultdict(list)
+    for hedge in hedges:
+        snp_to_hedges[frozenset(hedge.positions)].append(hedge)
+    freq_hedges = defaultdict(list)
+    for snp_fs, values in snp_to_hedges.items():
+        coverage = sum(v.weight for v in values)
+        for v in values:
+            v.frequency = v.weight / coverage * 100
+            if v.frequency >= 1:
+                freq_hedges[snp_fs].append(v)
+    for snp_fs, values in freq_hedges.items():
+        coverage = sum(v.weight for v in values)
+        for v in values:
+            v.frequency = v.weight / coverage * 100
+    print(freq_hedges)
+    return freq_hedges
+
+
 def create_hedges(
         reads: List[List[pysam.AlignedSegment]],
         target_snps: List[SNP],
@@ -26,30 +45,58 @@ def create_hedges(
     hedges_weight = defaultdict(int)
     for read in tqdm(reads, desc='Create hedges from reads', disable=not verbose):
         # here still ref positions
+        read_hash = hash(frozenset(read))
         if len(read) == 1:
             positions, nucls = SNP.select_snps_from_single_read(read[0], all_snp_positions, region_start)
             positions, nucls = [positions], [nucls]
+            start_pos = read[0].pos
         elif len(read) == 2:
-            selected_snps = SNP.select_snps_from_paired_read(read, all_snp_positions, region_start)
-            if selected_snps is not None:
-                positions, nucls = selected_snps
-            else:
-                chimera_paired_read_count += 1
-                continue
+            positions1, nucls1 = SNP.select_snps_from_single_read(read[0], all_snp_positions, region_start)
+            positions2, nucls2 = SNP.select_snps_from_single_read(read[1], all_snp_positions, region_start)
+            positions = []
+            nucls = []
+            start_pos = []
+            if len(positions1) > 0:
+                positions.append(positions1)
+                nucls.append(nucls1)
+                start_pos.append(read[0].pos)
+            if len(positions2) > 0:
+                positions.append(positions2)
+                nucls.append(nucls2)
+                start_pos.append(read[1].pos)
+            # todo chimera reads
+            # if selected_snps is not None:
+            #     positions, nucls = selected_snps
+            # else:
+            #     chimera_paired_read_count += 1
+            #     continue
         else:
             raise ValueError(f'Read must be single or paired, but given read with {len(read)} parts')
 
         if any(map(len, positions)):  # any part has SNP
             # here still ref positions
             try:
-                hedge = HEdge.build(positions, nucls, snp2genome, genome2snp)
-                if hedge is not None:
-                    if hash(hedge) not in hedges_weight:
-                        hedges.append(hedge)
-                    hedges_weight[hash(hedge)] += 1
-                else:
-                    # TODO handle holes in reads
-                    holed_reads_count += 1
+                created_hedges = []
+                for pos, nucl in zip(positions, nucls):
+                    created_hedges.append(HEdge.build([pos], [nucl], snp2genome, genome2snp, start_pos))
+
+                for hedge in created_hedges:
+                    if hedge is not None:
+                        if hash(hedge) not in hedges_weight:
+                            hedges.append(hedge)
+                        hedges_weight[hash(hedge)] += 1
+                    else:
+                        # TODO handle holes in reads
+                        holed_reads_count += 1
+                # if len(positions) == 1:
+                #     hedge = HEdge.build(positions, nucls, snp2genome, genome2snp, reference_length, start_pos)
+                # if hedge is not None:
+                #     if hash(hedge) not in hedges_weight:
+                #         hedges.append(hedge)
+                #     hedges_weight[hash(hedge)] += 1
+                # else:
+                #     # TODO handle holes in reads
+                #     holed_reads_count += 1
             except ValueError as err:
                 # TODO fix indels in read
                 raise ValueError('Fix indels in read')
@@ -64,7 +111,7 @@ def create_hedges(
 
     for he in hedges:
         he.init_weight(hedges_weight[hash(he)])
-        print(hedges_weight[hash(he)], he.coverage.compressed_repr)
+        print(he.start_pos, he.weight, he.positions, he.nucls)
 
     return hedges
 

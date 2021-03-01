@@ -48,6 +48,8 @@ def main(
 
     paired_reads, reference_length = load_paired_reads(bamfile_path, reference_name, min_mapping_quality)
 
+    # print(paired_reads[0][0].pos, paired_reads[0][1].pos, reference_length)
+
     snps = create_snps_from_aligned_segments(
         paired_reads,
         reference_length,
@@ -71,9 +73,18 @@ def main(
     target_hedges = [he for he in hedges if he.weight >= target_hedge_weight]
     print(f'|Target HyperEdges| = {len(target_hedges)}')
 
+    new_target_hedges = init_frequencies(target_hedges)
+
+    dict_dict_hedges = defaultdict(dict)
+    for pos_set, h_list in new_target_hedges.items():
+        for h in h_list:
+            dict_dict_hedges[pos_set][''.join(h.nucls)] = h
+
+    print(dict_dict_hedges)
     # Run algo
     haplo_hedges, metrics_log = algo_merge_hedge_contigs(
-        hedges=target_hedges,
+        hedges=dict_dict_hedges,
+        target_snp_count=len(target_snps),
         hedge_match_size_thresh=hedge_match_size,
         hedge_jaccard_thresh=hedge_jaccard,
         master_match_size_thresh=master_match_size,

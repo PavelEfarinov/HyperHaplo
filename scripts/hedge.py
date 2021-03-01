@@ -1,90 +1,48 @@
 from __future__ import annotations
 
+import math
 from bisect import bisect_left
 from typing import List, Optional, Dict, Tuple
 from collections import Counter, defaultdict
 from more_itertools import pairwise
 
 from scripts.segment import SegmentList, LocalSegmentIntersection
+from scripts.utils import SegmentTree, ScanLineElement
 
 
 class Coverage:
-    def __init__(self, compressed_repr: Dict = None):
-        self.is_compressed = True
-        self.compressed_repr = {
-            'inc': defaultdict(int),
-            'dec': defaultdict(int)
-        } if compressed_repr is None else compressed_repr
-        self.value: Optional[List[int]] = None
+    def __init__(self, coverage: ScanLineElement = None, cov_weight=0):
+        self.coverage_weight = cov_weight
+        if coverage is not None:
+            self.coverage_map = coverage
+        else:
+            self.coverage_map = ScanLineElement()
 
-    def add(self, start_position: int, end_position: int, value: int = 1):
+    def add(self, start_position: List[int], end_position: List[int], value: int = 1):
         """ Add coverage on the interval.
         Args:
             start_position: Start position of the new coverage interval (inclusive).
             end_position: End position of the new coverage interval (inclusive).
             value: Delta value of the new coverage interval.
         """
-        self.compressed_repr['inc'][start_position] += value
-        self.compressed_repr['dec'][end_position + 1] -= value
-        self.is_compressed = True
-
-    def get_uncompressed(
-            self,
-            genome_length: int,
-            snp_pos_in_genome: Dict[int, int]
-    ) -> List[int]:
-        """ Uncompressed efficient representation of coverage to the whole genome length.
-        Args:
-            genome_length: Length of the genome.
-            snp_pos_in_genome: Mapping from the ordered snp position to a positino in the genome.
-
-        Returns:
-            List[int]: Histogram coverage of the whole genome.
-        """
-        if not self.is_compressed:
-            return self.value
-        else:
-            coverage = [0 for _ in range(genome_length)]
-
-            def uncompress_interval(items):
-                for pos, value in items:
-                    if pos < genome_length:
-                        coverage[snp_pos_in_genome[pos]] = value
-
-            uncompress_interval(self.compressed_repr['inc'])
-            uncompress_interval(self.compressed_repr['dec'])
-
-            acc = 0
-            for i in range(genome_length):
-                acc += coverage[i]
-                coverage[i] = acc
-
-            self.value = coverage
-            self.is_compressed = False
-            return coverage
-
-    def avg(self, genome_length: int):
-        # TODO fast evaluation of avg coverage
-        pass
+        self.coverage_weight += value
+        for start, end in zip(start_position, end_position):
+            self.coverage_map.add(start, end, 1)
 
     @staticmethod
     def union(cov1: Coverage, cov2: Coverage) -> Coverage:
-        compressed_repr = {
-            'inc': defaultdict(int),
-            'dec': defaultdict(int)
-        }
-        for repr in [cov1.compressed_repr, cov2.compressed_repr]:
-            for key in ['inc', 'dec']:
-                for pos, value in repr[key].items():
-                    compressed_repr[key][pos] += value
-        return Coverage(compressed_repr)
+        cov = Coverage()
+        min_index = min([cov1.coverage_map.starts[0], cov2.coverage_map.starts[0]])
+        max_index = max([cov1.coverage_map.starts[0], cov2.coverage_map.starts[0]])
+        cov.add([min_index], [max_index], 1)
+        return cov
 
 
 class HEdge:
     def __init__(
             self,
             snp2genome: Dict[int, int],
-            genome2snp: Dict[int, int]
+            genome2snp: Dict[int, int],
     ):
         self.snp2genome = snp2genome
         self.genome2snp = genome2snp
@@ -92,6 +50,8 @@ class HEdge:
         self.count_snp = 0
         self.coverage = Coverage()
         self.frequency = 1
+        self.start_pos = -1
+        self.used = False
 
     class Overlap:
         def __init__(
@@ -324,6 +284,7 @@ class HEdge:
             nucls: List[List[str]],
             snp2genome: Dict[int, int],
             genome2snp: Dict[int, int],
+            start_pos: List[int],
             reindex_snps: bool = True
     ) -> Optional[HEdge]:
         """ Builder method for HEdge subclasses.
@@ -363,7 +324,8 @@ class HEdge:
                 positions=positions[0],
                 nucls=nucls[0],
                 snp2genome=snp2genome,
-                genome2snp=genome2snp
+                genome2snp=genome2snp,
+                start_pos=start_pos[0],
             )
         elif len(positions) == 2:
             return PairedHEdge(
@@ -372,7 +334,7 @@ class HEdge:
                 right_positions=positions[1],
                 right_nucls=nucls[1],
                 snp2genome=snp2genome,
-                genome2snp=genome2snp
+                genome2snp=genome2snp,
             )
         else:
             # TODO try MultiHEdge
@@ -473,16 +435,19 @@ class HEdge:
             new_positions.append(positions)
             new_nucls.append(nucls)
 
+        # TODO add the start positions here
         new_hedge = HEdge.build(
+            start_pos=[min(he1.start_pos, he2.start_pos)],
             positions=new_positions,
             nucls=new_nucls,
             genome2snp=he1.genome2snp,
             snp2genome=he1.snp2genome,
             reindex_snps=False)
         new_hedge.init_weight(
-            value=he1.weight + he2.weight,
+            value=min(he1.weight, he2.weight),
             coverage=Coverage.union(he1.coverage, he2.coverage)
         )
+        new_hedge.frequency = min(he1.frequency, he2.frequency)
         return new_hedge
 
     def init_weight(self, value: int, coverage: Coverage = None):
@@ -530,7 +495,8 @@ class SingleHEdge(HEdge):
             positions: List[int],
             nucls: List[str],
             snp2genome: Dict[int, int],
-            genome2snp: Dict[int, int]
+            genome2snp: Dict[int, int],
+            start_pos: int,
     ):
         assert len(positions) == len(nucls), f'{len(positions)} != {len(nucls)}'
         assert len(positions), 'Hyper Edge is empty'
@@ -540,13 +506,14 @@ class SingleHEdge(HEdge):
         self.positions = positions
         self.nucls = nucls
         self._hash = hash(frozenset(zip(self.positions, self.nucls)))
+        self.start_pos = start_pos
 
     def init_weight(self, value: int, coverage: Coverage = None):
         self.weight = value
         if coverage is None:
             self.coverage.add(
-                start_position=self.positions[0],
-                end_position=self.positions[-1],
+                start_position=[self.positions[0]],
+                end_position=[self.positions[-1]],
                 value=self.weight
             )
         else:
@@ -579,7 +546,7 @@ class SingleHEdge(HEdge):
         return list(zip(genome_positions, self.nucls))
 
     def __repr__(self):
-        return f'SingleHEdge(L={self.positions[0]}, R={self.positions[-1]}, weight={self.weight})'
+        return f'SingleHEdge(L={self.positions[0]}, R={self.positions[-1]}, frequency={self.frequency}, snps={self.nucls})'
 
 
 class PairedHEdge(HEdge):
@@ -590,7 +557,7 @@ class PairedHEdge(HEdge):
             right_positions: List[int],
             right_nucls: List[str],
             snp2genome: Dict[int, int],
-            genome2snp: Dict[int, int]
+            genome2snp: Dict[int, int],
     ):
         assert len(left_positions) == len(left_nucls), f'{len(left_positions)} != {len(left_nucls)}'
         assert len(right_positions) == len(right_nucls), f'{len(right_positions)} != {len(right_nucls)}'
@@ -611,16 +578,10 @@ class PairedHEdge(HEdge):
     def init_weight(self, value: int, coverage: Coverage = None):
         self.weight = value
         if coverage is None:
-            self.coverage.add(
-                start_position=self.left_positions[0],
-                end_position=self.left_positions[-1],
-                value=self.weight
-            )
-            self.coverage.add(
-                start_position=self.right_positions[0],
-                end_position=self.right_positions[-1],
-                value=self.weight
-            )
+            self.coverage.add(start_position=[self.left_positions[0], self.right_positions[0]],
+                              end_position=[self.left_positions[-1], self.right_positions[-1]],
+                              value=self.weight
+                              )
         else:
             self.coverage = coverage
 

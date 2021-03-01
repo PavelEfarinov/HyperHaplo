@@ -262,8 +262,22 @@ def eval_coverage_dist_matrix(hedges: List[HEdge], INF) -> np.ndarray:
     return coverage_dist_matrix
 
 
+def remove_leftovers(hedges: Dict[frozenset, Dict[str, HEdge]]):
+    for key in hedges:
+        hedges_dict = hedges[key]
+        popping = []
+        for nucls, hedge in hedges_dict.items():
+            if hedge.frequency < 1:  # todo
+                popping.append(nucls)
+        for p in popping:
+            hedges_dict.pop(p)
+        hedges[key] = hedges_dict
+    return hedges
+
+
 def algo_merge_hedge_contigs(
-        hedges: List[HEdge],
+        hedges: Dict[frozenset, Dict[str, HEdge]],
+        target_snp_count: int,
         hedge_match_size_thresh: int = 5,
         hedge_jaccard_thresh: float = 0.5,
         master_match_size_thresh: int = 10,
@@ -273,89 +287,115 @@ def algo_merge_hedge_contigs(
 ) -> Tuple[List[HEdge], Mapping[str, List]]:
     metrics = defaultdict(list)
 
-    # conflicting_hedge_indexes = find_conflicting_hedges(target_hedges)
-    # print('Conflicting hedges count:', len(conflicting_hedge_indexes))
-
-    # Sort hedges to speed up pairwise linkages evaluation
-    hedges = sorted(hedges, key=lambda he: (he.begin(), he.end()))
-
-    # Fix errors in reads
-    # TODO
-
-    # Evaluate all linkages
-    hedges_linkages, linkage_metrics = get_hedges_merge_order_in_window(
-        sorted_hedges=hedges,
-        verbose=verbose,
-        save_metrics=debug
-    )
-    metrics.update(linkage_metrics)
-
-    # Merge linkages
-    hedges_linkages.sort(reverse=True)
-
-    masters = DSU(size=len(hedges))
-    master_hedges: List[HEdge] = hedges[:]  # copy
-
-    for overlap_size, positional_jaccard, (he1_idx, he2_idx), match_size \
-            in tqdm(hedges_linkages, desc='Merging hedges', disable=not verbose):
-        contig_1_idx = masters.find(he1_idx)
-        contig_2_idx = masters.find(he2_idx)
-
-        if contig_1_idx == contig_2_idx:
-            continue
-
-        master_hedge_1 = master_hedges[contig_1_idx]
-        master_hedge_2 = master_hedges[contig_2_idx]
-
-        master_hedges_inter = HEdge.intersect(master_hedge_1, master_hedge_2)
-        master_hedges_overlap = HEdge.Overlap.metrics(master_hedge_1, master_hedge_2, master_hedges_inter)
-
-        # Log master metrics
-        if debug:
-            metrics['master_overlap_size'].append(master_hedges_overlap.overlap_size)
-            metrics['master_match_size'].append(master_hedges_overlap.match_size)
-            metrics['master_positional_jaccard'].append(master_hedges_overlap.positional_jaccard)
-            metrics['masters_are_consistent'].append(int(master_hedges_overlap.is_consistent))
-            if master_hedges_overlap.overlap_size > 0:
-                metrics['master_overlap_accuracy'].append(master_hedges_overlap.overlap_accuracy)
-
-        # Merging condition
-        consistent_merging = master_hedges_overlap.is_consistent
-        hedges_are_close = (match_size >= hedge_match_size_thresh or
-                            positional_jaccard >= hedge_jaccard_thresh)
-        masters_are_close = (master_hedges_overlap.match_size >= master_match_size_thresh or
-                             master_hedges_overlap.positional_jaccard >= master_jaccard_thresh)
-
-        if consistent_merging and (hedges_are_close or masters_are_close):
-            master_idx = masters.union(he1_idx, he2_idx)
-            master_hedge = HEdge.union(master_hedge_1, master_hedge_2)
-            master_hedges[master_idx] = master_hedge
-
-    master_hedge_indexes = set(masters.find(i) for i in range(len(hedges)))
-    master_hedges = [master_hedges[i] for i in master_hedge_indexes]
-    print(f'Master hedges after merging: {len(master_hedges)}')
-    haplo_hedges = master_hedges
-
-    # Scaffolding
-    # TODO
-    # INF = int(1e10)
-    # distance_threshold = int(1e9)
-    # coverage_dist_matrix = eval_coverage_dist_matrix(master_hedges, INF=INF)
-    # clustering = AgglomerativeClustering(
-    #     n_clusters=None,
-    #     affinity='precomputed',
-    #     linkage='complete',
-    #     distance_threshold=distance_threshold).fit(coverage_dist_matrix)
-    # print(f'Contig clustesrs count: {len(set(clustering.labels_))}')
-
-    # haplo_hedges_dict = defaultdict(list)
-    # for label, hedge in zip(clustering.labels_, master_hedges):
-    #     haplo_hedges_dict[label].append(hedge)
-
-    # haplo_hedges = [
-    #     reduce(HEdge.merge_with, hedges)
-    #     for hedges in tqdm(haplo_hedges_dict.values(), desc='Merging clusters to single hedge')
-    # ]
-    # print(f'Contigs after clustering by freq: {len(haplo_hedges)}')
-
+    remove_leftovers(hedges)
+    pairs = get_pairs(hedges)
+    haplo_hedges = []
+    while len(pairs) > 0:
+        print('----Iteration started----')
+        print('Current hedges')
+        print(hedges)
+        # todo jaccard???
+        print('Current pairs')
+        pairs.sort(key=lambda x: (get_intersection_snp_length(x),
+                                  min(x[0].frequency, x[1].frequency),
+                                  min(x[0].positions[0], x[1].positions[0]),
+                                  ), reverse=True)
+        for pair in pairs:
+            print(pair[0], pair[1])
+        for i in range(len(pairs)):
+            pair = pairs[i]
+            he1 = pair[0]
+            he2 = pair[1]
+            if he1.used or he2.used:
+                continue
+            print(f'Merging {pair[0]} and {pair[1]}')
+            new_hedge = HEdge.union(he1, he2)
+            if len(new_hedge.positions) == target_snp_count:
+                if new_hedge.frequency < 1:
+                    print('!!!!!!!!!!!!', pair)
+                haplo_hedges.append(new_hedge)
+            else:
+                new_h_nucls = ''.join(new_hedge.nucls)
+                if frozenset(new_hedge.positions) not in hedges or new_h_nucls not in hedges[frozenset(new_hedge.positions)]:
+                    hedges[frozenset(new_hedge.positions)][new_h_nucls] = new_hedge
+                else:
+                    print('-- stopped')
+                    continue
+            he1.used = True
+            he2.used = True
+            delta = min(he1.frequency, he2.frequency)
+            pairs[i][0].frequency -= delta
+            pairs[i][1].frequency -= delta
+            # print(pairs[i])
+            hedges[frozenset(pairs[i][0].positions)][''.join(he1.nucls)] = pairs[i][0]
+            hedges[frozenset(pairs[i][1].positions)][''.join(he2.nucls)] = pairs[i][1]
+        hedges = remove_leftovers(hedges)
+        print('Hedges after iteration')
+        for h, v in hedges.items():
+            print(h)
+            for i in v.values():
+                print(i)
+        pairs = get_pairs(hedges)
+    print('----Finished algo----')
+    print(haplo_hedges)
+    print('----Recounting frequencies----')
+    freq_sum = 0
+    for hedge in haplo_hedges:
+        freq_sum += hedge.frequency
+    for i in range(len(haplo_hedges)):
+        haplo_hedges[i].frequency = haplo_hedges[i].frequency / freq_sum * 100
+    print(haplo_hedges)
     return haplo_hedges, metrics
+
+
+def get_intersection_snp_length(pair: Tuple[HEdge]):
+    check_pair = list(pair)
+    if check_pair[0].positions[0] > check_pair[1].positions[0]:
+        check_pair[0], check_pair[1] = check_pair[1], check_pair[0]
+    return max(0, check_pair[1].positions[0] - check_pair[0].positions[-1] + 1)
+
+
+def get_pairs(hedges: Dict[frozenset, Dict[str, HEdge]]):
+    # interesting_snp_sets = set()
+    # for snps_set_1 in hedges:
+    #     found_including = False
+    #     for snps_set_2 in hedges:
+    #         if snps_set_1 != snps_set_2:
+    #             if snps_set_1.issubset(snps_set_2):
+    #                 found_including = True
+    #                 break
+    #     if not found_including:
+    #         interesting_snp_sets.add(snps_set_1)
+    # int_sets = list(interesting_snp_sets)
+    int_sets = list(k for k in hedges.keys() if len(hedges[k]) > 0)
+    interesting_snp_sets = set(k for k in hedges.keys() if len(hedges[k]) > 0)
+    found_any_new_condidtions = False
+    pairs = []
+    for set1_i in range(len(int_sets)):
+        set1 = int_sets[set1_i]
+        for set2_i in range(set1_i + 1, len(interesting_snp_sets)):
+            set2 = int_sets[set2_i]
+            if min(max(set1), max(set2)) + 1 < max(min(set1), min(set2)):
+                continue
+            if set1.union(set2) in interesting_snp_sets:
+                continue # fixing problem with incorrect pieces creating
+            if set1 != set2:
+                if not set1.issubset(set2) and not set2.issubset(set1):
+                    found_any_new_condidtions = True
+                # check_for_snps = not set1.isdisjoint(set2)
+                for nucls1, hedge1 in hedges[set1].items():
+                    for nucls2, hedge2 in hedges[set2].items():
+                        can_merge = True
+                        for pos in hedge1.positions:
+                            if pos in hedge2.positions:
+                                if hedge1.snp2genome[pos] != hedge2.snp2genome[pos]:
+                                    can_merge = False
+                                    break
+                        if set(hedge1.positions).issubset(set(hedge2.positions)) or \
+                                set(hedge2.positions).issubset(set(hedge1.positions)):
+                            continue
+                        if can_merge:
+                            hedge1.used = False
+                            hedge2.used = False
+                            pairs.append((hedge1, hedge2))
+    return pairs if found_any_new_condidtions else []
