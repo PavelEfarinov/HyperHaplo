@@ -52,6 +52,7 @@ class HEdge:
         self.frequency = 1
         self.start_pos = -1
         self.used = False
+        self.snp_to_nucl = {}
 
     class Overlap:
         def __init__(
@@ -507,6 +508,7 @@ class SingleHEdge(HEdge):
         self.nucls = nucls
         self._hash = hash(frozenset(zip(self.positions, self.nucls)))
         self.start_pos = start_pos
+        self.snp_to_nucl = {snp: nucl for snp, nucl in zip(positions, nucls)}
 
     def init_weight(self, value: int, coverage: Coverage = None):
         self.weight = value

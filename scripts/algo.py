@@ -286,6 +286,7 @@ def algo_merge_hedge_contigs(
         debug: bool = False
 ) -> Tuple[List[HEdge], Mapping[str, List]]:
     metrics = defaultdict(list)
+    print('----Algo started----')
 
     remove_leftovers(hedges)
     pairs = get_pairs(hedges)
@@ -293,11 +294,15 @@ def algo_merge_hedge_contigs(
     while len(pairs) > 0:
         print('----Iteration started----')
         print('Current hedges')
+        for s, h in hedges.items():
+            print(s)
+            print(h)
         print(hedges)
         # todo jaccard???
         print('Current pairs')
         pairs.sort(key=lambda x: (get_intersection_snp_length(x),
                                   min(x[0].frequency, x[1].frequency),
+                                  -abs(x[0].frequency - x[1].frequency),
                                   min(x[0].positions[0], x[1].positions[0]),
                                   ), reverse=True)
         for pair in pairs:
@@ -306,9 +311,10 @@ def algo_merge_hedge_contigs(
             pair = pairs[i]
             he1 = pair[0]
             he2 = pair[1]
-            if he1.used or he2.used:
-                continue
             print(f'Merging {pair[0]} and {pair[1]}')
+            if he1.used or he2.used:
+                print('-- stopped')
+                continue
             new_hedge = HEdge.union(he1, he2)
             if len(new_hedge.positions) == target_snp_count:
                 if new_hedge.frequency < 1:
@@ -342,6 +348,7 @@ def algo_merge_hedge_contigs(
     freq_sum = 0
     for hedge in haplo_hedges:
         freq_sum += hedge.frequency
+    print(freq_sum)
     for i in range(len(haplo_hedges)):
         haplo_hedges[i].frequency = haplo_hedges[i].frequency / freq_sum * 100
     print(haplo_hedges)
@@ -349,10 +356,8 @@ def algo_merge_hedge_contigs(
 
 
 def get_intersection_snp_length(pair: Tuple[HEdge]):
-    check_pair = list(pair)
-    if check_pair[0].positions[0] > check_pair[1].positions[0]:
-        check_pair[0], check_pair[1] = check_pair[1], check_pair[0]
-    return max(0, check_pair[1].positions[0] - check_pair[0].positions[-1] + 1)
+    intersection = set(pair[0].positions).intersection(set(pair[1].positions))
+    return len(intersection)
 
 
 def get_pairs(hedges: Dict[frozenset, Dict[str, HEdge]]):
@@ -377,8 +382,8 @@ def get_pairs(hedges: Dict[frozenset, Dict[str, HEdge]]):
             set2 = int_sets[set2_i]
             if min(max(set1), max(set2)) + 1 < max(min(set1), min(set2)):
                 continue
-            if set1.union(set2) in interesting_snp_sets:
-                continue # fixing problem with incorrect pieces creating
+            # if set1.union(set2) in interesting_snp_sets:
+            #     continue # fixing problem with incorrect pieces creating
             if set1 != set2:
                 if not set1.issubset(set2) and not set2.issubset(set1):
                     found_any_new_condidtions = True
@@ -388,9 +393,10 @@ def get_pairs(hedges: Dict[frozenset, Dict[str, HEdge]]):
                         can_merge = True
                         for pos in hedge1.positions:
                             if pos in hedge2.positions:
-                                if hedge1.snp2genome[pos] != hedge2.snp2genome[pos]:
+                                if hedge1.snp_to_nucl[pos] != hedge2.snp_to_nucl[pos]:
                                     can_merge = False
                                     break
+
                         if set(hedge1.positions).issubset(set(hedge2.positions)) or \
                                 set(hedge2.positions).issubset(set(hedge1.positions)):
                             continue
