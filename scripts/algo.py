@@ -262,12 +262,12 @@ def eval_coverage_dist_matrix(hedges: List[HEdge], INF) -> np.ndarray:
     return coverage_dist_matrix
 
 
-def remove_leftovers(hedges: Dict[frozenset, Dict[str, HEdge]]):
+def remove_leftovers(hedges: Dict[frozenset, Dict[str, HEdge]], error_prob):
     for key in hedges:
         hedges_dict = hedges[key]
         popping = []
         for nucls, hedge in hedges_dict.items():
-            if hedge.frequency < 1:  # todo
+            if hedge.frequency <= error_prob:  # todo
                 popping.append(nucls)
         for p in popping:
             hedges_dict.pop(p)
@@ -282,14 +282,17 @@ def algo_merge_hedge_contigs(
         hedge_jaccard_thresh: float = 0.5,
         master_match_size_thresh: int = 10,
         master_jaccard_thresh: float = 0.9,
+        error_probability: float = 0,
         verbose: bool = False,
         debug: bool = False
 ) -> Tuple[List[HEdge], Mapping[str, List]]:
+    error_probability *= 100
     metrics = defaultdict(list)
     print('----Algo started----')
 
-    remove_leftovers(hedges)
+    remove_leftovers(hedges, error_probability)
     pairs = get_pairs(hedges)
+    old_hedges=None
     haplo_hedges = []
     while len(pairs) > 0:
         print('----Iteration started----')
@@ -299,31 +302,35 @@ def algo_merge_hedge_contigs(
             print(h)
         print(hedges)
         # todo jaccard???
-        print('Current pairs')
+        any_merged = False
+        # print('Current pairs')
         pairs.sort(key=lambda x: (get_intersection_snp_length(x),
                                   min(x[0].frequency, x[1].frequency),
                                   -abs(x[0].frequency - x[1].frequency),
                                   min(x[0].positions[0], x[1].positions[0]),
                                   ), reverse=True)
-        for pair in pairs:
-            print(pair[0], pair[1])
+        # for pair in pairs:
+        #     print(pair[0], pair[1])
         for i in range(len(pairs)):
             pair = pairs[i]
             he1 = pair[0]
             he2 = pair[1]
+            if any_merged:
+                break
             print(f'Merging {pair[0]} and {pair[1]}')
             if he1.used or he2.used:
                 print('-- stopped')
                 continue
             new_hedge = HEdge.union(he1, he2)
             if len(new_hedge.positions) == target_snp_count:
-                if new_hedge.frequency < 1:
+                if new_hedge.frequency < error_probability:
                     print('!!!!!!!!!!!!', pair)
                 haplo_hedges.append(new_hedge)
             else:
                 new_h_nucls = ''.join(new_hedge.nucls)
                 if frozenset(new_hedge.positions) not in hedges or new_h_nucls not in hedges[frozenset(new_hedge.positions)]:
                     hedges[frozenset(new_hedge.positions)][new_h_nucls] = new_hedge
+                    any_merged = True
                 else:
                     print('-- stopped')
                     continue
@@ -335,13 +342,24 @@ def algo_merge_hedge_contigs(
             # print(pairs[i])
             hedges[frozenset(pairs[i][0].positions)][''.join(he1.nucls)] = pairs[i][0]
             hedges[frozenset(pairs[i][1].positions)][''.join(he2.nucls)] = pairs[i][1]
-        hedges = remove_leftovers(hedges)
+        # if old_hedges is not None and hedges.items() == old_hedges.items():
+        #     print('ahtung')
+        #     print(old_hedges, hedges)
+        #     break
+        # else:
+        #     old_hedges = hedges.copy()
+        hedges = remove_leftovers(hedges, error_probability)
         print('Hedges after iteration')
         for h, v in hedges.items():
             print(h)
             for i in v.values():
                 print(i)
+        if not any_merged:
+            print('Nothing merged')
+            break
         pairs = get_pairs(hedges)
+        print('Pairs after getting')
+        print(pairs)
     print('----Finished algo----')
     print(haplo_hedges)
     print('----Recounting frequencies----')
@@ -351,7 +369,8 @@ def algo_merge_hedge_contigs(
     print(freq_sum)
     for i in range(len(haplo_hedges)):
         haplo_hedges[i].frequency = haplo_hedges[i].frequency / freq_sum * 100
-    print(haplo_hedges)
+    for haplo in haplo_hedges:
+        print(haplo)
     return haplo_hedges, metrics
 
 

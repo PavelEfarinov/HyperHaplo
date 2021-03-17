@@ -236,7 +236,7 @@ def load_single_reads(bamfile_path: Path) -> List[pysam.AlignedSegment]:
 
 def load_paired_reads(
         bamfile_path: Path,
-        reference_name: str,
+        reference_length: int,
         min_mapping_quality: int = 20,
         verbose: bool = True
 ) -> Tuple[List[List[pysam.AlignedSegment]], int]:
@@ -248,7 +248,6 @@ def load_paired_reads(
 
     reads_dict = defaultdict(list)
     with pysam.AlignmentFile(bamfile_path, 'rb') as bf:
-        reference_length = bf.get_reference_length(reference_name)
 
         read: pysam.AlignedSegment
         for read in tqdm(bf.fetch(), desc='Load reads', disable=not verbose):

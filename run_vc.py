@@ -9,10 +9,11 @@ from scripts.metrics import *
 
 @click.command()
 @click.option('-bam', '--bamfile_path', type=str, help="Input bam file.")
-@click.option('-ref', '--reference_name', type=str, default='pol_HXB2', help="Reference name.")
+@click.option('-ref', '--reference_length', type=str, help="Reference length.")
+@click.option('-err', '--error_probability', type=str, default=0, help="Error probability.")
 @click.option('-bq', '--min_base_quality', type=int, default=0, help="Minimal base quality for position in SNP.")
 @click.option('-mq', '--min_mapping_quality', type=int, default=0, help="Minimal mapping quality for a read.")
-@click.option('-mc', '--min_minor_coverage', type=float, default=0.006, help="Minimal minor coverage to call SNP.")
+@click.option('-mc', '--min_minor_coverage', type=float, default=0.05, help="Minimal minor coverage to call SNP.")
 @click.option('-w', '--target_hedge_weight', type=int, default=3, help="Minimal weight for hedges.")
 @click.option('-cl', '--min_contig_length', type=int, default=0, help="Minimal length for contig to infer haplotype.")
 @click.option('-rl', '--min_relative_contig_length', type=float, default=0.0,
@@ -27,7 +28,8 @@ from scripts.metrics import *
 @click.option('-mj', '--master_jaccard', type=float, default=0.9, help="Metrics.")
 def main(
         bamfile_path: str,
-        reference_name: str,
+        reference_length: int,
+        error_probability: float,
         min_base_quality: int,
         min_mapping_quality: int,
         min_minor_coverage: float,
@@ -45,8 +47,9 @@ def main(
 ):
     tin = time.time()
     bamfile_path = Path(bamfile_path)
+    reference_length = int(reference_length)
 
-    paired_reads, reference_length = load_paired_reads(bamfile_path, reference_name, min_mapping_quality)
+    paired_reads, reference_length = load_paired_reads(bamfile_path, reference_length, min_mapping_quality)
 
     # print(paired_reads[0][0].pos, paired_reads[0][1].pos, reference_length)
 
@@ -61,7 +64,7 @@ def main(
     snp_nucls = get_unique_nucls(snps)
     print(f'Nucleotides from reads: {snp_nucls}')
     target_snps = SNP.filter(snps, min_minor_coverage=min_minor_coverage)
-    print(f'Target SNP count: {len(target_snps)}')
+    print(f'Target SNP count: {len(target_snps)}, {target_snps}')
 
     major_reference = GenomeReference(snps)
     print(f'Read data time: {round(time.time() - tin)} sec')
@@ -70,7 +73,7 @@ def main(
     hedges = create_hedges(paired_reads, target_snps, region_start=region_start or 0, verbose=verbose)
     print(f'|HyperEdges| = {len(hedges)}')
 
-    target_hedges = [he for he in hedges if he.weight >= target_hedge_weight]
+    target_hedges = [he for he in hedges if he.frequency >= error_probability * 100]
     print(f'|Target HyperEdges| = {len(target_hedges)}')
 
     new_target_hedges = init_frequencies(target_hedges)
@@ -89,6 +92,7 @@ def main(
         hedge_jaccard_thresh=hedge_jaccard,
         master_match_size_thresh=master_match_size,
         master_jaccard_thresh=master_jaccard,
+        error_probability=error_probability,
         verbose=verbose
     )
     print(f'|Master HyperEdges| = {len(haplo_hedges)}')
