@@ -19,7 +19,7 @@ class Phylogeny:
         self.graph = nx.DiGraph()
         # nx.set_node_attributes(self.graph, "alive", True)
         self.graph.add_node(reference, color='c')
-        self.snp_positions = random.sample([i for i in range(len(reference)// 3)], snp_count)
+        self.snp_positions = random.sample([i for i in range(len(reference))], snp_count)
         self.snp_positions.sort()
 
     def get_edges_count(self, node):
@@ -168,8 +168,8 @@ def generate_probabilities(n):
 
 if __name__ == "__main__":
     reference_name = 'sequence'
-    haplo_count = 4
-    snp_count = 5
+    haplo_count = 25
+    snp_count = 50
     with open(f'../../data/fasta_sequences/{reference_name}.fasta') as inf:
         lines = inf.readlines()
         reference = ''.join(l.strip() for l in lines[1:])

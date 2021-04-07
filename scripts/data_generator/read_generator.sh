@@ -1,4 +1,4 @@
-cd ../../generated_haplos/sequence_haplo_4_snp_5
+cd ../../generated_haplos/sequence_haplo_25_snp_50
 iss generate --n_reads 400000 --mode perfect --genomes sequences.fasta --abundance_file abundance.txt --output reads
 bwa index ../../data/fasta_sequences/sequence.fasta
 bwa mem ../../data/fasta_sequences/sequence.fasta reads_R1.fastq reads_R2.fastq > alignment.sam
