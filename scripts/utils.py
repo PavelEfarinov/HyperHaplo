@@ -47,6 +47,7 @@ class ScanLineElement:
         self.ends.append(end)
         self.weight += weight
 
+
 class Element:
     def __init__(self):
         self.left = 0

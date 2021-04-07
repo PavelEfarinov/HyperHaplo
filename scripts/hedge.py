@@ -445,7 +445,7 @@ class HEdge:
             snp2genome=he1.snp2genome,
             reindex_snps=False)
         new_hedge.init_weight(
-            value=min(he1.weight, he2.weight),
+            value=round(min(he1.frequency, he2.frequency) * max(he1.weight, he2.weight) / 100),
             coverage=Coverage.union(he1.coverage, he2.coverage)
         )
         new_hedge.frequency = min(he1.frequency, he2.frequency)
@@ -548,7 +548,7 @@ class SingleHEdge(HEdge):
         return list(zip(genome_positions, self.nucls))
 
     def __repr__(self):
-        return f'SingleHEdge(L={self.positions[0]}, R={self.positions[-1]}, frequency={self.frequency}, snps={self.nucls})'
+        return f'SingleHEdge(L={self.positions[0]}, R={self.positions[-1]}, frequency={self.frequency}, weight={self.weight}, snps={self.nucls})'
 
 
 class PairedHEdge(HEdge):

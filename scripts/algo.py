@@ -1,7 +1,10 @@
+import math
 from collections import defaultdict
 # from functools import reduce
+from copy import deepcopy
 from typing import List, Mapping, Tuple, Set, Dict
 from graphviz import Digraph
+from scipy.stats import norm
 from tqdm import tqdm
 import numpy as np
 # from sklearn.cluster import AgglomerativeClustering
@@ -182,70 +185,6 @@ def algo_hedge_connectivity_graph(hedges: List[HEdge], save_graph_bfs_path=False
     print('Shortest path len:', dist[t])
 
 
-def get_hedges_merge_order(
-        hedges: List[HEdge]
-) -> Tuple[List[Tuple[float, int, int]], Mapping]:
-    metrics = defaultdict(list)
-    order = []
-    for i, he1 in enumerate(tqdm(hedges, desc='Ordering hedges')):
-        for j, he2 in enumerate(hedges):
-            if i < j:
-                jaccard = he1.positional_jaccard(he2)
-                metrics['jaccard'].append(jaccard)
-
-                accuracy = he1.overlapped_accuracy(he2)
-                metrics['accuracy'].append(accuracy)
-
-                consistency = he1.is_consistent_with(he2)
-                metrics['consistency'].append(int(consistency))
-
-                if consistency:
-                    order.append((-jaccard, i, j))
-    return order, metrics
-
-
-def get_hedges_merge_order_in_window(
-        sorted_hedges: List[HEdge],
-        verbose: bool,
-        save_metrics: bool = False
-) -> Tuple[List[Tuple[int, float, int, Tuple[int, int]]], Dict[str, List]]:
-    metrics = defaultdict(list)
-    order = []
-
-    with tqdm(total=len(sorted_hedges), desc='Linkage metrics evaluation', disable=not verbose) as pbar:
-        window_begin = 0
-        while window_begin < len(sorted_hedges):
-            hedge = sorted_hedges[window_begin]  # current leader
-            for i in range(window_begin + 1, len(sorted_hedges)):
-                other_hedge = sorted_hedges[i]
-                if hedge.end() < other_hedge.begin():
-                    if save_metrics:
-                        metrics['window_size'].append(i - window_begin)
-                    break  # some of previous hedges were large than current leader
-                intersection = HEdge.intersect(hedge, other_hedge)
-                if HEdge.is_allowed_merge_linkage(hedge, other_hedge, intersection):
-                    overlap = HEdge.Overlap.metrics(hedge, other_hedge, intersection)
-                    if overlap.is_consistent:
-                        # TODO search optimal metrics
-                        order.append((
-                            overlap.match_size / overlap.overlap_size,
-                            overlap.positional_jaccard,
-                            (window_begin, i),
-                            overlap.match_size
-                        ))
-                    if save_metrics:
-                        metrics['match_size'].append(overlap.match_size)
-                        metrics['overlap_size'].append(overlap.overlap_size)
-                        metrics['positional_jaccard'].append(overlap.positional_jaccard)
-                        metrics['overlap_accuracy'].append(overlap.overlap_accuracy)
-                else:
-                    if save_metrics:
-                        metrics['forbidden_hedge_pair'].append((window_begin, i))
-            window_begin += 1
-            pbar.update(1)
-    return order, metrics
-
-
 def eval_coverage_dist_matrix(hedges: List[HEdge], INF) -> np.ndarray:
     coverages = [hedge.avg_coverage for hedge in hedges]
 
@@ -275,24 +214,48 @@ def remove_leftovers(hedges: Dict[frozenset, Dict[str, HEdge]], error_prob):
     return hedges
 
 
+def get_intervals(xi_i, p_xi, frequencies, alpha=0.95):
+    N = xi_i / p_xi
+    dist_xi = norm.interval(alpha, loc=xi_i, scale=math.sqrt(xi_i * (1 - p_xi)))
+    dist_xi = (dist_xi[0] / N, dist_xi[1] / N)
+    return dist_xi
+
+
+def get_frequencies(xi_i, p_xi, eta_i, p_eta):
+    N = xi_i / p_xi
+    K = eta_i / p_eta
+    frequencies = {'average': (p_eta + p_xi) / 2, 'weighted': p_eta * K / (K + N) + p_xi * N / (K + N),
+                   'minimum': min(p_xi, p_eta)}
+    return frequencies
+
+
+def check_leftovers_distribution(count1, freq1, count2, freq2):
+    p1 = freq1 / 100
+    p2 = freq2 / 100
+    frequencies = get_frequencies(count1, p1, count2, p2)
+    interval1 = get_intervals(count1, p1, frequencies)
+    interval2 = get_intervals(count2, p2, frequencies)
+    if interval2[0] < frequencies['minimum'] < interval2[1] and interval1[0] < frequencies['minimum'] < interval1[1]:
+        return 0, 0, frequencies['weighted'] * 100
+    else:
+        return (p1 - frequencies['minimum']) * 100, (p2 - frequencies['minimum']) * 100, frequencies['minimum'] * 100
+
+
 def algo_merge_hedge_contigs(
         hedges: Dict[frozenset, Dict[str, HEdge]],
         target_snp_count: int,
-        hedge_match_size_thresh: int = 5,
-        hedge_jaccard_thresh: float = 0.5,
-        master_match_size_thresh: int = 10,
-        master_jaccard_thresh: float = 0.9,
         error_probability: float = 0,
         verbose: bool = False,
         debug: bool = False
 ) -> Tuple[List[HEdge], Mapping[str, List]]:
+    ever_created_hedges = deepcopy(hedges)
     error_probability *= 100
     metrics = defaultdict(list)
     print('----Algo started----')
 
     remove_leftovers(hedges, error_probability)
     pairs = get_pairs(hedges)
-    old_hedges=None
+    old_hedges = None
     haplo_hedges = []
     while len(pairs) > 0:
         print('----Iteration started----')
@@ -300,11 +263,11 @@ def algo_merge_hedge_contigs(
         for s, h in hedges.items():
             print(s)
             print(h)
-        print(hedges)
         # todo jaccard???
         any_merged = False
         # print('Current pairs')
         pairs.sort(key=lambda x: (get_intersection_snp_length(x),
+                                  get_union_snp_length(x),
                                   min(x[0].frequency, x[1].frequency),
                                   -abs(x[0].frequency - x[1].frequency),
                                   min(x[0].positions[0], x[1].positions[0]),
@@ -322,23 +285,29 @@ def algo_merge_hedge_contigs(
                 print('-- stopped')
                 continue
             new_hedge = HEdge.union(he1, he2)
+            freq1, freq2, freq_new = check_leftovers_distribution(he1.weight, he1.frequency, he2.weight, he2.frequency)
+            new_hedge.frequency = freq_new
             if len(new_hedge.positions) == target_snp_count:
                 if new_hedge.frequency < error_probability:
                     print('!!!!!!!!!!!!', pair)
                 haplo_hedges.append(new_hedge)
             else:
                 new_h_nucls = ''.join(new_hedge.nucls)
-                if frozenset(new_hedge.positions) not in hedges or new_h_nucls not in hedges[frozenset(new_hedge.positions)]:
+                if frozenset(new_hedge.positions) not in ever_created_hedges or new_h_nucls not in ever_created_hedges[
+                    frozenset(new_hedge.positions)]:
                     hedges[frozenset(new_hedge.positions)][new_h_nucls] = new_hedge
+                    ever_created_hedges[frozenset(new_hedge.positions)][new_h_nucls] = new_hedge
                     any_merged = True
                 else:
                     print('-- stopped')
                     continue
             he1.used = True
             he2.used = True
-            delta = min(he1.frequency, he2.frequency)
-            pairs[i][0].frequency -= delta
-            pairs[i][1].frequency -= delta
+            # delta = min(he1.frequency, he2.frequency)
+            pairs[i][0].weight *= freq1 / pairs[i][0].frequency
+            pairs[i][1].weight *= freq2 / pairs[i][1].frequency
+            pairs[i][0].frequency = freq1
+            pairs[i][1].frequency = freq2
             # print(pairs[i])
             hedges[frozenset(pairs[i][0].positions)][''.join(he1.nucls)] = pairs[i][0]
             hedges[frozenset(pairs[i][1].positions)][''.join(he2.nucls)] = pairs[i][1]
@@ -349,17 +318,17 @@ def algo_merge_hedge_contigs(
         # else:
         #     old_hedges = hedges.copy()
         hedges = remove_leftovers(hedges, error_probability)
-        print('Hedges after iteration')
-        for h, v in hedges.items():
-            print(h)
-            for i in v.values():
-                print(i)
+        # print('Hedges after iteration')
+        # for h, v in hedges.items():
+        #     print(h)
+        #     for i in v.values():
+        #         print(i)
         if not any_merged:
             print('Nothing merged')
             break
         pairs = get_pairs(hedges)
-        print('Pairs after getting')
-        print(pairs)
+        # print('Pairs after getting')
+        # print(pairs)
     print('----Finished algo----')
     print(haplo_hedges)
     print('----Recounting frequencies----')
@@ -377,6 +346,11 @@ def algo_merge_hedge_contigs(
 def get_intersection_snp_length(pair: Tuple[HEdge]):
     intersection = set(pair[0].positions).intersection(set(pair[1].positions))
     return len(intersection)
+
+
+def get_union_snp_length(pair: Tuple[HEdge]):
+    union = set(pair[0].positions).union(set(pair[1].positions))
+    return len(union)
 
 
 def get_pairs(hedges: Dict[frozenset, Dict[str, HEdge]]):

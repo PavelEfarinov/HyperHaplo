@@ -88,10 +88,6 @@ def main(
     haplo_hedges, metrics_log = algo_merge_hedge_contigs(
         hedges=dict_dict_hedges,
         target_snp_count=len(target_snps),
-        hedge_match_size_thresh=hedge_match_size,
-        hedge_jaccard_thresh=hedge_jaccard,
-        master_match_size_thresh=master_match_size,
-        master_jaccard_thresh=master_jaccard,
         error_probability=error_probability,
         verbose=verbose
     )
