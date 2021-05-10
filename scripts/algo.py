@@ -208,6 +208,8 @@ def remove_leftovers(hedges: Dict[frozenset, Dict[str, HEdge]], error_prob):
         for nucls, hedge in hedges_dict.items():
             if hedge.frequency <= error_prob:  # todo
                 popping.append(nucls)
+            elif hedge.weight == 0:
+                popping.append(nucls)
         for p in popping:
             hedges_dict.pop(p)
         hedges[key] = hedges_dict
