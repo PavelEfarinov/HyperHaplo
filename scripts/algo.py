@@ -273,7 +273,6 @@ def algo_merge_hedge_contigs(
         debug: bool = False
 ) -> Tuple[List[HEdge], Mapping[str, List]]:
     ever_created_hedges = deepcopy(hedges)
-    error_probability *= 100
     metrics = defaultdict(list)
     print('----Algo started----')
 
@@ -313,7 +312,7 @@ def algo_merge_hedge_contigs(
             new_hedge.frequency = freq_new
             new_hedge.weight = (1 - freq1) * he1.weight + (1 - freq2) * he2.weight
             if len(new_hedge.positions) == target_snp_count:
-                assert new_hedge.frequency > error_probability
+                assert new_hedge.frequency > error_probability * 100
                 haplo_hedges.append(new_hedge)
             else:
                 new_h_nucls = ''.join(new_hedge.nucls)

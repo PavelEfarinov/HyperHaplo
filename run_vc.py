@@ -10,7 +10,7 @@ from scripts.metrics import *
 @click.command()
 @click.option('-bam', '--bamfile_path', type=str, help="Input bam file.")
 @click.option('-ref', '--reference_length', type=str, help="Reference length.")
-@click.option('-err', '--error_probability', type=str, default=0, help="Error probability.")
+@click.option('-err', '--error_probability', type=str, default=0.01, help="Error probability.")
 @click.option('-bq', '--min_base_quality', type=int, default=0, help="Minimal base quality for position in SNP.")
 @click.option('-mq', '--min_mapping_quality', type=int, default=0, help="Minimal mapping quality for a read.")
 @click.option('-mc', '--min_minor_coverage', type=float, default=0.05, help="Minimal minor coverage to call SNP.")
