@@ -4,7 +4,7 @@ from collections import defaultdict
 from copy import deepcopy
 from typing import List, Mapping, Tuple, Set, Dict
 from graphviz import Digraph
-from scipy.stats import norm
+from scipy.stats import norm, binom
 from tqdm import tqdm
 import numpy as np
 # from sklearn.cluster import AgglomerativeClustering
@@ -201,18 +201,39 @@ def eval_coverage_dist_matrix(hedges: List[HEdge], INF) -> np.ndarray:
     return coverage_dist_matrix
 
 
+def get_distance_between_hedges(hedge1: HEdge, hedge2: HEdge):
+    nucls1 = hedge1.nucls
+    nucls2 = hedge2.nucls
+    distance = 0
+    for i, j in zip(nucls1, nucls2):
+        if i != j:
+            distance += 1
+    return distance
+
+
 def remove_leftovers(hedges: Dict[frozenset, Dict[str, HEdge]], error_prob):
     for key in hedges:
         hedges_dict = hedges[key]
         popping = []
-        for nucls, hedge in hedges_dict.items():
-            if hedge.frequency <= error_prob:  # todo
-                popping.append(nucls)
-            elif hedge.weight == 0:
-                popping.append(nucls)
+        heavy_hedges = [h for n, h in hedges_dict.items() if (h.frequency > error_prob or h.weight == 0)]
+        light_hedges = [h for n, h in hedges_dict.items() if (h.frequency <= error_prob and h.weight != 0)]
+        for hedge in light_hedges:
+            max_proba, max_heavy_hedge = 0, None
+            if hedge.weight != 0:
+                for heavy_hedge in heavy_hedges:
+                    distance = get_distance_between_hedges(hedge, heavy_hedge)
+                    proba = binom.pmf(x=hedge.weight, n=hedge.weight + heavy_hedge.weight, p=error_prob ** distance)
+                    if proba > max_proba:
+                        max_proba, max_heavy_hedge = proba, heavy_hedge
+                if max_heavy_hedge is not None:
+                    hedges_dict[max_heavy_hedge.nucls].weight += hedge.weight
+                    hedges_dict[max_heavy_hedge.nucls].frequency = (hedge.weight * hedge.frequency +
+                                                                    max_heavy_hedge.weight * max_heavy_hedge.frequency) / (
+                                                                               hedge.weight + max_heavy_hedge.weight)
+            popping.append(hedge.nucls)
         for p in popping:
             hedges_dict.pop(p)
-        hedges[key] = hedges_dict
+        hedges[key] = hedges_dict 
     return hedges
 
 
@@ -235,9 +256,10 @@ def check_leftovers_distribution(count1, freq1, count2, freq2):
     p1 = freq1 / 100
     p2 = freq2 / 100
     frequencies = get_frequencies(count1, p1, count2, p2)
-    interval1 = get_intervals(count1, p1, frequencies)
-    interval2 = get_intervals(count2, p2, frequencies)
-    if interval2[0] < frequencies['minimum'] < interval2[1] and interval1[0] < frequencies['minimum'] < interval1[1]:
+    sum_sample_interval = get_intervals(count1 + count2, (p1 * count1 + p2 * count2) / (count1 + count2), frequencies)
+    # interval1 = get_intervals(count1, p1, frequencies)
+    # interval2 = get_intervals(count2, p2, frequencies)
+    if sum_sample_interval[0] < frequencies['weighted'] < sum_sample_interval[1]:
         return 0, 0, frequencies['weighted'] * 100
     else:
         return (p1 - frequencies['minimum']) * 100, (p2 - frequencies['minimum']) * 100, frequencies['minimum'] * 100
@@ -289,9 +311,9 @@ def algo_merge_hedge_contigs(
             new_hedge = HEdge.union(he1, he2)
             freq1, freq2, freq_new = check_leftovers_distribution(he1.weight, he1.frequency, he2.weight, he2.frequency)
             new_hedge.frequency = freq_new
+            new_hedge.weight = (1 - freq1) * he1.weight + (1 - freq2) * he2.weight
             if len(new_hedge.positions) == target_snp_count:
-                if new_hedge.frequency < error_probability:
-                    print('!!!!!!!!!!!!', pair)
+                assert new_hedge.frequency > error_probability
                 haplo_hedges.append(new_hedge)
             else:
                 new_h_nucls = ''.join(new_hedge.nucls)
