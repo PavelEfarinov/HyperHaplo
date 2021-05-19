@@ -203,11 +203,11 @@ class HEdge:
         positions += other.positions[j:]
         nucls += other.nucls[j:]
 
+        nucls = ''.join(nucls)
         # Reset attributes
         self.positions = positions
         self.nucls = nucls
         self.weight += other.weight
-        # self.weight = 0  # TODO Now self.weight is undefined.
         for i, cover in enumerate(other.coverage):
             self.coverage[i] += cover
 
@@ -505,7 +505,7 @@ class SingleHEdge(HEdge):
         super().__init__(snp2genome, genome2snp)
         self.count_snp = len(positions)
         self.positions = positions
-        self.nucls = nucls
+        self.nucls = ''.join(nucls)
         self._hash = hash(frozenset(zip(self.positions, self.nucls)))
         self.start_pos = start_pos
         self.snp_to_nucl = {snp: nucl for snp, nucl in zip(positions, nucls)}
@@ -569,9 +569,9 @@ class PairedHEdge(HEdge):
         super().__init__(snp2genome, genome2snp)
         self.count_snp = len(left_positions) + len(right_positions)
         self.left_positions = left_positions
-        self.left_nucls = left_nucls
+        self.left_nucls = ''.join(left_nucls)
         self.right_positions = right_positions
-        self.right_nucls = right_nucls
+        self.right_nucls = ''.join(right_nucls)
         self._hash = hash(frozenset(zip(
             self.left_positions + self.right_positions,
             self.left_nucls + self.right_nucls

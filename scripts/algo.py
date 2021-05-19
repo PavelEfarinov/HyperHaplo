@@ -215,8 +215,8 @@ def remove_leftovers(hedges: Dict[frozenset, Dict[str, HEdge]], error_prob):
     for key in hedges:
         hedges_dict = hedges[key]
         popping = []
-        heavy_hedges = [h for n, h in hedges_dict.items() if (h.frequency > error_prob or h.weight == 0)]
-        light_hedges = [h for n, h in hedges_dict.items() if (h.frequency <= error_prob and h.weight != 0)]
+C        heavy_hedges = [h for n, h in hedges_dict.items() if (h.frequency > error_prob and h.weight > 0)]
+        light_hedges = [h for n, h in hedges_dict.items() if (h.frequency <= error_prob or h.weight == 0)]
         for hedge in light_hedges:
             max_proba, max_heavy_hedge = 0, None
             if hedge.weight != 0:
@@ -229,11 +229,12 @@ def remove_leftovers(hedges: Dict[frozenset, Dict[str, HEdge]], error_prob):
                     hedges_dict[max_heavy_hedge.nucls].weight += hedge.weight
                     hedges_dict[max_heavy_hedge.nucls].frequency = (hedge.weight * hedge.frequency +
                                                                     max_heavy_hedge.weight * max_heavy_hedge.frequency) / (
-                                                                               hedge.weight + max_heavy_hedge.weight)
+                                                                           hedge.weight + max_heavy_hedge.weight)
             popping.append(hedge.nucls)
         for p in popping:
+            print(hedges_dict, p)
             hedges_dict.pop(p)
-        hedges[key] = hedges_dict 
+        hedges[key] = hedges_dict
     return hedges
 
 
@@ -253,16 +254,24 @@ def get_frequencies(xi_i, p_xi, eta_i, p_eta):
 
 
 def check_leftovers_distribution(count1, freq1, count2, freq2):
+    """
+    :param count1:
+    :param freq1:
+    :param count2:
+    :param freq2:
+    :return: frequencies of left, right and new, normalized to 1
+    """
     p1 = freq1 / 100
     p2 = freq2 / 100
     frequencies = get_frequencies(count1, p1, count2, p2)
     sum_sample_interval = get_intervals(count1 + count2, (p1 * count1 + p2 * count2) / (count1 + count2), frequencies)
     # interval1 = get_intervals(count1, p1, frequencies)
     # interval2 = get_intervals(count2, p2, frequencies)
-    if sum_sample_interval[0] < frequencies['weighted'] < sum_sample_interval[1]:
-        return 0, 0, frequencies['weighted'] * 100
+    print(sum_sample_interval, frequencies, freq1, freq2)
+    if sum_sample_interval[0] < frequencies['average'] < sum_sample_interval[1]:
+        return 0, 0, frequencies['weighted']
     else:
-        return (p1 - frequencies['minimum']) * 100, (p2 - frequencies['minimum']) * 100, frequencies['minimum'] * 100
+        return p1 - frequencies['minimum'], p2 - frequencies['minimum'], frequencies['minimum']
 
 
 def algo_merge_hedge_contigs(
@@ -277,7 +286,7 @@ def algo_merge_hedge_contigs(
     print('----Algo started----')
 
     remove_leftovers(hedges, error_probability)
-    pairs = get_pairs(hedges)
+    pairs = get_pairs(hedges, ever_created_hedges)
     old_hedges = None
     haplo_hedges = []
     while len(pairs) > 0:
@@ -286,72 +295,51 @@ def algo_merge_hedge_contigs(
         for s, h in hedges.items():
             print(s)
             print(h)
-        # todo jaccard???
-        any_merged = False
-        # print('Current pairs')
-        pairs.sort(key=lambda x: (get_intersection_snp_length(x),
-                                  get_union_snp_length(x),
-                                  min(x[0].frequency, x[1].frequency),
-                                  -abs(x[0].frequency - x[1].frequency),
-                                  min(x[0].positions[0], x[1].positions[0]),
-                                  ), reverse=True)
-        # for pair in pairs:
-        #     print(pair[0], pair[1])
-        for i in range(len(pairs)):
-            pair = pairs[i]
-            he1 = pair[0]
-            he2 = pair[1]
-            if any_merged:
-                break
-            print(f'Merging {pair[0]} and {pair[1]}')
-            if he1.used or he2.used:
-                print('-- stopped')
-                continue
-            new_hedge = HEdge.union(he1, he2)
-            freq1, freq2, freq_new = check_leftovers_distribution(he1.weight, he1.frequency, he2.weight, he2.frequency)
-            new_hedge.frequency = freq_new
-            new_hedge.weight = (1 - freq1) * he1.weight + (1 - freq2) * he2.weight
-            if len(new_hedge.positions) == target_snp_count:
-                assert new_hedge.frequency > error_probability * 100
-                haplo_hedges.append(new_hedge)
+
+        print('-------------printing pairs---------')
+        for pair in pairs:
+            print(pair)
+        pair = max(pairs, key=lambda x: (get_intersection_snp_length(x),
+                                         get_union_snp_length(x),
+                                         min(x[0].frequency, x[1].frequency),
+                                         -abs(x[0].frequency - x[1].frequency),
+                                         min(x[0].positions[0], x[1].positions[0]),
+                                         ))
+        index = pairs.index(pair)
+        he1 = pair[0]
+        he2 = pair[1]
+        print(f'Merging {pair[0]} and {pair[1]}')
+        new_hedge = HEdge.union(he1, he2)
+        freq1, freq2, freq_new = check_leftovers_distribution(he1.weight, he1.frequency, he2.weight, he2.frequency)
+        new_hedge.frequency = freq_new * 100
+        print(freq1, freq2, freq_new)
+        new_hedge.weight = (1 - freq1) * he1.weight + (1 - freq2) * he2.weight
+        if len(new_hedge.positions) == target_snp_count:
+            assert new_hedge.frequency > error_probability * 100
+            haplo_hedges.append(new_hedge)
+        else:
+            new_h_nucls = new_hedge.nucls
+            frozen_positions = frozenset(new_hedge.positions)
+            print('frozen', frozen_positions)
+            print('ever_created', ever_created_hedges)
+            print('new_nucls', new_h_nucls)
+            if frozen_positions not in ever_created_hedges or new_h_nucls not in ever_created_hedges[frozen_positions]:
+                hedges[frozen_positions][new_h_nucls] = new_hedge
+                ever_created_hedges[frozen_positions][new_h_nucls] = new_hedge
             else:
-                new_h_nucls = ''.join(new_hedge.nucls)
-                if frozenset(new_hedge.positions) not in ever_created_hedges or new_h_nucls not in ever_created_hedges[
-                    frozenset(new_hedge.positions)]:
-                    hedges[frozenset(new_hedge.positions)][new_h_nucls] = new_hedge
-                    ever_created_hedges[frozenset(new_hedge.positions)][new_h_nucls] = new_hedge
-                    any_merged = True
-                else:
-                    print('-- stopped')
-                    continue
-            he1.used = True
-            he2.used = True
-            # delta = min(he1.frequency, he2.frequency)
-            pairs[i][0].weight *= freq1 / pairs[i][0].frequency
-            pairs[i][1].weight *= freq2 / pairs[i][1].frequency
-            pairs[i][0].frequency = freq1
-            pairs[i][1].frequency = freq2
-            # print(pairs[i])
-            hedges[frozenset(pairs[i][0].positions)][''.join(he1.nucls)] = pairs[i][0]
-            hedges[frozenset(pairs[i][1].positions)][''.join(he2.nucls)] = pairs[i][1]
-        # if old_hedges is not None and hedges.items() == old_hedges.items():
-        #     print('ahtung')
-        #     print(old_hedges, hedges)
-        #     break
-        # else:
-        #     old_hedges = hedges.copy()
+                print('-- stopped')
+                hedges = remove_leftovers(hedges, error_probability)
+                pairs = get_pairs(hedges, ever_created_hedges)
+                continue
+        pairs[index][0].weight *= freq1 * 100 / pairs[index][0].frequency
+        pairs[index][1].weight *= freq2 * 100 / pairs[index][1].frequency
+        pairs[index][0].frequency = freq1 * 100
+        pairs[index][1].frequency = freq2 * 100
+        # print(pairs[i])
+        hedges[frozenset(pairs[index][0].positions)][he1.nucls] = pairs[index][0]
+        hedges[frozenset(pairs[index][1].positions)][he2.nucls] = pairs[index][1]
         hedges = remove_leftovers(hedges, error_probability)
-        # print('Hedges after iteration')
-        # for h, v in hedges.items():
-        #     print(h)
-        #     for i in v.values():
-        #         print(i)
-        if not any_merged:
-            print('Nothing merged')
-            break
-        pairs = get_pairs(hedges)
-        # print('Pairs after getting')
-        # print(pairs)
+        pairs = get_pairs(hedges, ever_created_hedges)
     print('----Finished algo----')
     print(haplo_hedges)
     print('----Recounting frequencies----')
@@ -376,21 +364,10 @@ def get_union_snp_length(pair: Tuple[HEdge]):
     return len(union)
 
 
-def get_pairs(hedges: Dict[frozenset, Dict[str, HEdge]]):
-    # interesting_snp_sets = set()
-    # for snps_set_1 in hedges:
-    #     found_including = False
-    #     for snps_set_2 in hedges:
-    #         if snps_set_1 != snps_set_2:
-    #             if snps_set_1.issubset(snps_set_2):
-    #                 found_including = True
-    #                 break
-    #     if not found_including:
-    #         interesting_snp_sets.add(snps_set_1)
-    # int_sets = list(interesting_snp_sets)
+def get_pairs(hedges: Dict[frozenset, Dict[str, HEdge]], ever_created_hedges: Dict[frozenset, Dict[str, HEdge]]):
     int_sets = list(k for k in hedges.keys() if len(hedges[k]) > 0)
     interesting_snp_sets = set(k for k in hedges.keys() if len(hedges[k]) > 0)
-    found_any_new_condidtions = False
+    found_any_new_conditions = False
     pairs = []
     for set1_i in range(len(int_sets)):
         set1 = int_sets[set1_i]
@@ -398,11 +375,9 @@ def get_pairs(hedges: Dict[frozenset, Dict[str, HEdge]]):
             set2 = int_sets[set2_i]
             if min(max(set1), max(set2)) + 1 < max(min(set1), min(set2)):
                 continue
-            # if set1.union(set2) in interesting_snp_sets:
-            #     continue # fixing problem with incorrect pieces creating
             if set1 != set2:
                 if not set1.issubset(set2) and not set2.issubset(set1):
-                    found_any_new_condidtions = True
+                    found_any_new_conditions = True
                 # check_for_snps = not set1.isdisjoint(set2)
                 for nucls1, hedge1 in hedges[set1].items():
                     for nucls2, hedge2 in hedges[set2].items():
@@ -417,7 +392,12 @@ def get_pairs(hedges: Dict[frozenset, Dict[str, HEdge]]):
                                 set(hedge2.positions).issubset(set(hedge1.positions)):
                             continue
                         if can_merge:
-                            hedge1.used = False
-                            hedge2.used = False
-                            pairs.append((hedge1, hedge2))
-    return pairs if found_any_new_condidtions else []
+                            new_hedge = HEdge.union(hedge1, hedge2)
+                            new_h_nucls = new_hedge.nucls
+                            frozen_positions = frozenset(new_hedge.positions)
+                            if frozen_positions not in ever_created_hedges or new_h_nucls not in ever_created_hedges[
+                                frozen_positions]:
+                                hedge1.used = False
+                                hedge2.used = False
+                                pairs.append((hedge1, hedge2))
+    return pairs if found_any_new_conditions else []
