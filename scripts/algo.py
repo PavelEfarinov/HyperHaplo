@@ -215,7 +215,7 @@ def remove_leftovers(hedges: Dict[frozenset, Dict[str, HEdge]], error_prob):
     for key in hedges:
         hedges_dict = hedges[key]
         popping = []
-C        heavy_hedges = [h for n, h in hedges_dict.items() if (h.frequency > error_prob and h.weight > 0)]
+        heavy_hedges = [h for n, h in hedges_dict.items() if (h.frequency > error_prob and h.weight > 0)]
         light_hedges = [h for n, h in hedges_dict.items() if (h.frequency <= error_prob or h.weight == 0)]
         for hedge in light_hedges:
             max_proba, max_heavy_hedge = 0, None
