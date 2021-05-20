@@ -540,7 +540,7 @@ class SingleHEdge(HEdge):
     def get_position_segments(self) -> List[List[int]]:
         return [self.positions]
 
-    def get_nucl_segments(self) -> List[List[str]]:
+    def get_nucl_segments(self) -> List[str]:
         return [self.nucls]
 
     def get_flatten_snp(self) -> List[Tuple[int, str]]:
@@ -612,7 +612,7 @@ class PairedHEdge(HEdge):
     def get_position_segments(self) -> List[List[int]]:
         return [self.left_positions, self.right_positions]
 
-    def get_nucl_segments(self) -> List[List[str]]:
+    def get_nucl_segments(self) -> List[str]:
         return [self.left_nucls, self.right_nucls]
 
     def get_flatten_snp(self) -> List[Tuple[int, str]]:
