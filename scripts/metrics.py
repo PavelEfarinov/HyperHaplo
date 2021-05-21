@@ -57,7 +57,11 @@ def read_haplos_from_fasta(
     with pysam.FastaFile(fasta_file) as rf:
         for name in rf.references:
             haplo_nucls.append(rf.fetch(name))
-            freqs.append(float(name.split('_')[-1]))
+            try:
+                freqs.append(float(name.split('_')[-1]))
+            except Exception as e:
+                freqs.append(0)
+
 
     if normalize:
         freqs = normalize_freq(freqs)
