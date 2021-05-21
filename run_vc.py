@@ -22,14 +22,10 @@ from scripts.metrics import *
 @click.option('-re', '--region_end', type=int, default=None, help="End of target region in the reference.")
 @click.option('-out', '--output_folder', type=str, default='.', help="Output folder to store results.")
 @click.option('-log', '--verbose', is_flag=True, help="Print tqdm status bars in console.")
-@click.option('-hos', '--hedge_match_size', type=int, default=5, help="Metrics.")
-@click.option('-mos', '--master_match_size', type=int, default=10, help="Metrics.")
-@click.option('-hj', '--hedge_jaccard', type=float, default=0.5, help="Metrics.")
-@click.option('-mj', '--master_jaccard', type=float, default=0.9, help="Metrics.")
 def main(
         bamfile_path: str,
         reference_length: int,
-        error_probability: float,
+        error_probability: str,
         min_base_quality: int,
         min_mapping_quality: int,
         min_minor_coverage: float,
@@ -39,11 +35,7 @@ def main(
         region_start: int,
         region_end: int,
         output_folder: str,
-        verbose: bool,
-        hedge_match_size: int,
-        master_match_size: int,
-        hedge_jaccard: float,
-        master_jaccard: float
+        verbose: bool
 ):
     tin = time.time()
     bamfile_path = Path(bamfile_path)
@@ -71,7 +63,7 @@ def main(
     print(f'Read data time: {round(time.time() - tin)} sec')
 
     tin = time.time()
-    hedges = create_hedges(paired_reads, target_snps, region_start=region_start or 0, verbose=verbose)
+    hedges = create_hedges(paired_reads, target_snps, region_start=region_start or 0)
     print(f'|HyperEdges| = {len(hedges)}')
 
     target_hedges = [he for he in hedges if he.frequency >= error_probability * 100]
@@ -84,7 +76,6 @@ def main(
         for h in h_list:
             dict_dict_hedges[pos_set][''.join(h.nucls)] = h
 
-    print(dict_dict_hedges)
     # Run algo
     haplo_hedges, metrics_log = algo_merge_hedge_contigs(
         hedges=dict_dict_hedges,

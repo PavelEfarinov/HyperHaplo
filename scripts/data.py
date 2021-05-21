@@ -255,9 +255,9 @@ def load_paired_reads(
                 unmapped_read_count += 1
                 continue
 
-            if not read.is_proper_pair:
-                not_proper_pair_reads += 1
-                continue
+            # if not read.is_proper_pair:
+            #     not_proper_pair_reads += 1
+            #     continue
 
             if read.is_supplementary:
                 supplementary_read_count += 1
@@ -383,7 +383,7 @@ def create_snps_from_aligned_segments(
 
     out_of_ref_positions = set()
     ref_positions = set()
-    for read in tqdm(reads, desc='SNPs from [AlignedSegment]', disable=not verbose):
+    for read in tqdm(reads, desc='SNPs from [AlignedSegment]'):
         for read_part in read:
             seq = read_part.query_sequence
             quals = read_part.query_alignment_qualities
@@ -394,12 +394,12 @@ def create_snps_from_aligned_segments(
                     continue
 
                 refined_read_pos = read_pos - read_part.query_alignment_start
-                qual = quals[refined_read_pos]
+                # qual = quals[refined_read_pos]
                 nucl = seq[read_pos]
 
-                if qual < min_base_quality:
-                    fail_quality += 1
-                    continue
+                # if qual < min_base_quality:
+                #     fail_quality += 1
+                #     continue
 
                 ref_positions.add(ref_pos)
                 snp_counter[ref_pos - region_start][SNP.process_nucl(nucl)] += 1

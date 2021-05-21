@@ -24,7 +24,6 @@ def init_frequencies(hedges: List[HEdge]):
         coverage = sum(v.weight for v in values)
         for v in values:
             v.frequency = v.weight / coverage * 100
-    print(freq_hedges)
     return freq_hedges
 
 
@@ -49,7 +48,7 @@ def create_hedges(
         if len(read) == 1:
             positions, nucls = SNP.select_snps_from_single_read(read[0], all_snp_positions, region_start)
             positions, nucls = [positions], [nucls]
-            start_pos = read[0].pos
+            start_pos = [read[0].pos]
         elif len(read) == 2:
             positions1, nucls1 = SNP.select_snps_from_single_read(read[0], all_snp_positions, region_start)
             positions2, nucls2 = SNP.select_snps_from_single_read(read[1], all_snp_positions, region_start)
@@ -109,9 +108,9 @@ def create_hedges(
         print(f'Skipped reads with holes    : {holed_reads_count}')
         print(f'Skipped chimera paired reads: {chimera_paired_read_count}')
 
-    for he in hedges:
-        he.init_weight(hedges_weight[hash(he)])
-        print(he.start_pos, he.weight, he.positions, he.nucls)
+        for he in hedges:
+            he.init_weight(hedges_weight[hash(he)])
+            print(he.start_pos, he.weight, he.positions, he.nucls)
 
     return hedges
 

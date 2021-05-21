@@ -7,36 +7,8 @@ from graphviz import Digraph
 from scipy.stats import norm, binom
 from tqdm import tqdm
 import numpy as np
-# from sklearn.cluster import AgglomerativeClustering
 
 from scripts.hedge import HEdge
-from scripts.utils import DSU
-
-
-def create_hedge_connectivity_graph(hedges: List[HEdge]):
-    g = defaultdict(list)
-    edges_count = 0
-
-    def add_edge(u, v):
-        nonlocal edges_count
-        edges_count += 1
-        g[u].append(v)
-
-    # vertex 0 for fake source
-    for i, he_i in enumerate(tqdm(hedges, desc='Create vertexes'), start=1):
-        for j, he_j in enumerate(hedges, start=1):
-            if i < j:
-                if he_i.is_consistent_with(he_j):
-                    g[i].append(j)
-                    if he_i < he_j:
-                        add_edge(i, j)
-                    elif he_j < he_i:
-                        add_edge(j, i)
-                    else:
-                        # TODO not comparable
-                        pass
-
-    return g, edges_count
 
 
 def plot_graph(g):
@@ -75,132 +47,6 @@ def plot_graph_bfs(g, vertex_count, depth=5):
     d.render(f'output/graphviz/{name}.gv', view=True)
 
 
-def calc_in_out_deg(g) -> Tuple[Mapping[int, int], Mapping[int, int]]:
-    in_deg = defaultdict(int)
-    out_deg = defaultdict(int)
-
-    for u, vertexes in g.items():
-        out_deg[u] = len(vertexes)
-        for v in set(vertexes):
-            in_deg[v] += 1
-    return in_deg, out_deg
-
-
-def get_inv_graph(g) -> Mapping[int, List[int]]:
-    inv_g = defaultdict(list)
-    for u, vertexes in g.items():
-        for v in set(vertexes):
-            inv_g[v].append(u)
-    return inv_g
-
-
-def calc_paths_count(inv_g, vertex_count) -> List[int]:
-    used = [False for _ in range(vertex_count)]
-    paths_count = [0 for _ in range(vertex_count)]
-    s, t = 0, vertex_count - 1
-
-    paths_count[s] = 1
-    used[s] = True
-
-    def count(v):
-        if used[v]:
-            return paths_count[v]
-
-        acc = 0
-        for u in inv_g[v]:
-            if not used[u]:
-                count(u)
-            acc += paths_count[u]
-
-        paths_count[v] = acc
-        used[v] = True
-
-    count(t)
-    return paths_count
-
-
-def calc_graph_depth(g, vertex_count) -> List[int]:
-    INF = int(1e5)
-    used = [False for _ in range(vertex_count)]
-    dist = [INF for _ in range(vertex_count)]
-    s, t = 0, vertex_count - 1
-
-    dist[s] = 0
-    used[s] = True
-
-    q = [s]
-    while len(q):
-        q_next = []
-        for u in q:
-            for v in g[u]:
-                dist[v] = min(dist[u] + 1, dist[v])
-                if not used[v]:
-                    used[v] = True
-                    q_next.append(v)
-        q = q_next
-    return dist
-
-
-def find_conflicting_hedges(hedges: List[HEdge]) -> Set[int]:
-    conflicting_hedge_indexes = set()
-    for i, he in enumerate(tqdm(hedges, desc='Searching conflicting hedges')):
-        for he_other in hedges:
-            if he.is_ambiguous_with(he_other):
-                conflicting_hedge_indexes.add(i)
-                break
-    return conflicting_hedge_indexes
-
-
-def algo_hedge_connectivity_graph(hedges: List[HEdge], save_graph_bfs_path=False):
-    # Build graph
-    graph, edges_count = create_hedge_connectivity_graph(hedges)
-    vertex_count = len(hedges)
-    print('Vertexes count', vertex_count)
-    print('Edges count', edges_count)
-    del edges_count
-
-    in_deg, out_deg = calc_in_out_deg(graph)
-
-    # Add source and target vertexes
-    s, t = 0, vertex_count + 1
-    for v in range(1, vertex_count + 1):
-        if not in_deg[v] and out_deg[v]:
-            graph[s].append(v)
-        if in_deg[v] and not out_deg[v]:
-            graph[v].append(t)
-    vertex_count += 2
-    print('Source vertex count:', len(graph[s]))
-    print('Target vertex count:', len([u for u, vertexes in graph.items() if t in vertexes]))
-
-    if save_graph_bfs_path:
-        for depth in range(1, 2):
-            plot_graph_bfs(graph, vertex_count, depth)
-            print(f'Depth[{depth}]: done')
-
-    # inv_g = get_inv_graph(g)
-    # paths_count = calc_paths_count(inv_g, vertex_count)
-    # print('Total paths count:', paths_count)
-
-    dist = calc_graph_depth(graph, vertex_count)
-    print('Shortest path len:', dist[t])
-
-
-def eval_coverage_dist_matrix(hedges: List[HEdge], INF) -> np.ndarray:
-    coverages = [hedge.avg_coverage for hedge in hedges]
-
-    n = len(hedges)
-    coverage_dist_matrix = np.full(shape=(n, n), fill_value=INF)
-
-    for he1_idx, he1, in enumerate(hedges):
-        for he2_idx, he2 in enumerate(hedges):
-            if he1_idx < he2_idx:
-                if not he1.is_overlapped_with(he2):
-                    coverage_dist_value = abs(coverages[he1_idx] - coverages[he2_idx])
-                    coverage_dist_matrix[he1_idx][he2_idx] = coverage_dist_value
-                    coverage_dist_matrix[he2_idx][he1_idx] = coverage_dist_value
-    return coverage_dist_matrix
-
-
 def get_distance_between_hedges(hedge1: HEdge, hedge2: HEdge):
     nucls1 = hedge1.nucls
     nucls2 = hedge2.nucls
@@ -232,13 +78,13 @@ def remove_leftovers(hedges: Dict[frozenset, Dict[str, HEdge]], error_prob):
                                                                            hedge.weight + max_heavy_hedge.weight)
             popping.append(hedge.nucls)
         for p in popping:
-            print(hedges_dict, p)
+            # print(hedges_dict, p)
             hedges_dict.pop(p)
         hedges[key] = hedges_dict
     return hedges
 
 
-def get_intervals(xi_i, p_xi, frequencies, alpha=0.95):
+def get_intervals(xi_i, p_xi, frequencies, alpha=0.85):
     N = xi_i / p_xi
     dist_xi = norm.interval(alpha, loc=xi_i, scale=math.sqrt(xi_i * (1 - p_xi)))
     dist_xi = (dist_xi[0] / N, dist_xi[1] / N)
@@ -267,7 +113,7 @@ def check_leftovers_distribution(count1, freq1, count2, freq2):
     sum_sample_interval = get_intervals(count1 + count2, (p1 * count1 + p2 * count2) / (count1 + count2), frequencies)
     # interval1 = get_intervals(count1, p1, frequencies)
     # interval2 = get_intervals(count2, p2, frequencies)
-    print(sum_sample_interval, frequencies, freq1, freq2)
+    # print(sum_sample_interval, frequencies, freq1, freq2)
     if sum_sample_interval[0] < frequencies['average'] < sum_sample_interval[1]:
         return 0, 0, frequencies['weighted']
     else:
@@ -283,22 +129,40 @@ def algo_merge_hedge_contigs(
 ) -> Tuple[List[HEdge], Mapping[str, List]]:
     ever_created_hedges = deepcopy(hedges)
     metrics = defaultdict(list)
-    print('----Algo started----')
+    if verbose:
+        print('----Algo started----')
 
     remove_leftovers(hedges, error_probability)
+
+    keys_to_delete = set()
+    hedges_keys = list(hedges.keys())
+    for key1_i in range(len(hedges_keys)):
+        key1 = hedges_keys[key1_i]
+        for key2_i in range(key1_i + 1, len(hedges_keys)):
+            key2 = hedges_keys[key2_i]
+            if key1.issubset(key2):
+                keys_to_delete.add(key1)
+            elif key2.issubset(key1):
+                keys_to_delete.add(key2)
+    print(keys_to_delete)
+    for key in keys_to_delete:
+        del hedges[key]
+
     pairs = get_pairs(hedges, ever_created_hedges)
     old_hedges = None
     haplo_hedges = []
     while len(pairs) > 0:
-        print('----Iteration started----')
-        print('Current hedges')
-        for s, h in hedges.items():
-            print(s)
-            print(h)
+        print('Iteration started, pairs count: ', len(pairs))
+        if verbose:
+            print('Current hedges')
+            for s, h in hedges.items():
+                print(s)
+                print(h)
 
-        print('-------------printing pairs---------')
-        for pair in pairs:
-            print(pair)
+            print('-------------printing pairs---------')
+            for pair in pairs:
+                print(pair)
+
         pair = max(pairs, key=lambda x: (get_intersection_snp_length(x),
                                          get_union_snp_length(x),
                                          min(x[0].frequency, x[1].frequency),
@@ -308,26 +172,22 @@ def algo_merge_hedge_contigs(
         index = pairs.index(pair)
         he1 = pair[0]
         he2 = pair[1]
-        print(f'Merging {pair[0]} and {pair[1]}')
+        if verbose:
+            print(f'Merging {pair[0]} and {pair[1]}')
         new_hedge = HEdge.union(he1, he2)
         freq1, freq2, freq_new = check_leftovers_distribution(he1.weight, he1.frequency, he2.weight, he2.frequency)
         new_hedge.frequency = freq_new * 100
-        print(freq1, freq2, freq_new)
         new_hedge.weight = (1 - freq1) * he1.weight + (1 - freq2) * he2.weight
         if len(new_hedge.positions) == target_snp_count:
-            assert new_hedge.frequency > error_probability * 100
-            haplo_hedges.append(new_hedge)
+            if new_hedge.frequency > error_probability * 100:
+                haplo_hedges.append(new_hedge)
         else:
             new_h_nucls = new_hedge.nucls
             frozen_positions = frozenset(new_hedge.positions)
-            print('frozen', frozen_positions)
-            print('ever_created', ever_created_hedges)
-            print('new_nucls', new_h_nucls)
             if frozen_positions not in ever_created_hedges or new_h_nucls not in ever_created_hedges[frozen_positions]:
                 hedges[frozen_positions][new_h_nucls] = new_hedge
                 ever_created_hedges[frozen_positions][new_h_nucls] = new_hedge
             else:
-                print('-- stopped')
                 hedges = remove_leftovers(hedges, error_probability)
                 pairs = get_pairs(hedges, ever_created_hedges)
                 continue
