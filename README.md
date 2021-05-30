@@ -67,14 +67,14 @@ python run_vc.py --bamfile_path data/hiv-lab-mix/alignment_sorted.bam
 -err 0.01
 ```
 The results are stored in the specified folder in fasta format (itmo_final.fasta). 
-#Generated data testing
+# Generated data testing
 You can also test the tool using the generated data. For data generation you should use the```scripts/data_generator/data_generator.py``` script.
 You can change the haplotype count and SNP positions count in the main function. 
 After running the script the generated haplotypes are stored in ```generated_haplos``` folder.
 You should run the ```scripts/data_generator/read_generator.sh``` script to run the iss reads generation tool and align the generated reads to the reference.
 The following pipeline if the same as for the HIV data.
 
-#Analysis
+# Analysis
 There is a script to measure main metrics for the generated haplotypes. 
 It's located in the test folder: ```test/eval_hamming_distance.py```
 There are two strings in the beginning of the script which specify the ground truth and predicted haplotypes paths.
