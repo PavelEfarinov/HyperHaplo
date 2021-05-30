@@ -53,6 +53,7 @@ class HEdge:
         self.start_pos = -1
         self.used = False
         self.snp_to_nucl = {}
+        self.edge_ids = set()
 
     class Overlap:
         def __init__(
@@ -448,6 +449,7 @@ class HEdge:
             value=round(min(he1.frequency, he2.frequency) * max(he1.weight, he2.weight) / 100),
             coverage=Coverage.union(he1.coverage, he2.coverage)
         )
+        new_hedge.edge_ids = he1.edge_ids.union(he2.edge_ids)
         new_hedge.frequency = min(he1.frequency, he2.frequency)
         return new_hedge
 

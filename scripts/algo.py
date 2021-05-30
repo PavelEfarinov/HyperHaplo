@@ -84,7 +84,7 @@ def remove_leftovers(hedges: Dict[frozenset, Dict[str, HEdge]], error_prob):
     return hedges
 
 
-def get_intervals(xi_i, p_xi, frequencies, alpha=0.85):
+def get_intervals(xi_i, p_xi, frequencies, alpha=0.95):
     N = xi_i / p_xi
     dist_xi = norm.interval(alpha, loc=xi_i, scale=math.sqrt(xi_i * (1 - p_xi)))
     dist_xi = (dist_xi[0] / N, dist_xi[1] / N)
@@ -165,6 +165,7 @@ def algo_merge_hedge_contigs(
 
         pair = max(pairs, key=lambda x: (get_intersection_snp_length(x),
                                          get_union_snp_length(x),
+                                         get_union_pairs_percent(x),
                                          min(x[0].frequency, x[1].frequency),
                                          -abs(x[0].frequency - x[1].frequency),
                                          min(x[0].positions[0], x[1].positions[0]),
@@ -222,6 +223,12 @@ def get_intersection_snp_length(pair: Tuple[HEdge]):
 def get_union_snp_length(pair: Tuple[HEdge]):
     union = set(pair[0].positions).union(set(pair[1].positions))
     return len(union)
+
+
+def get_union_pairs_percent(pair: Tuple[HEdge]):
+    intersection = pair[0].edge_ids.intersection(pair[1].edge_ids)
+    union = pair[0].edge_ids.union(pair[1].edge_ids)
+    return len(intersection) / len(union)
 
 
 def get_pairs(hedges: Dict[frozenset, Dict[str, HEdge]], ever_created_hedges: Dict[frozenset, Dict[str, HEdge]]):

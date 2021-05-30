@@ -42,7 +42,8 @@ def create_hedges(
 
     hedges: List[HEdge] = []
     hedges_weight = defaultdict(int)
-    for read in tqdm(reads, desc='Create hedges from reads', disable=not verbose):
+    hedges_ids = defaultdict(set)
+    for read_id, read in enumerate(tqdm(reads, desc='Create hedges from reads', disable=not verbose)):
         # here still ref positions
         read_hash = hash(frozenset(read))
         if len(read) == 1:
@@ -81,9 +82,11 @@ def create_hedges(
 
                 for hedge in created_hedges:
                     if hedge is not None:
+
                         if hash(hedge) not in hedges_weight:
                             hedges.append(hedge)
                         hedges_weight[hash(hedge)] += 1
+                        hedges_ids[hash(hedge)].add(read_id)
                     else:
                         # TODO handle holes in reads
                         holed_reads_count += 1
@@ -110,6 +113,7 @@ def create_hedges(
 
         for he in hedges:
             he.init_weight(hedges_weight[hash(he)])
+            he.edge_ids = hedges_ids[hash(he)]
             print(he.start_pos, he.weight, he.positions, he.nucls)
 
     return hedges
