@@ -4,12 +4,13 @@ from typing import Tuple, List, Set, Dict
 import pysam
 from tqdm import tqdm
 
+from scripts.HyperEdge.HyperEdge import HyperEdge
+from scripts.HyperEdge.hyper_utils import build_hyper_edge
 from scripts.data import SNP, GenomeReference, Haplotype
-from scripts.hedge import HEdge
 from scripts.metrics import normalize_freq
 
 
-def init_frequencies(hedges: List[HEdge]):
+def init_frequencies(hedges: List[HyperEdge]):
     snp_to_hedges = defaultdict(list)
     for hedge in hedges:
         snp_to_hedges[frozenset(hedge.positions)].append(hedge)
@@ -32,7 +33,7 @@ def create_hedges(
         target_snps: List[SNP],
         region_start: int,
         verbose=True
-) -> List[HEdge]:
+) -> List[HyperEdge]:
     all_snp_positions = set(snp.position for snp in target_snps)  # ref positions
     snp2genome, genome2snp = SNP.reindex_snp_and_genome_mapping(target_snps)
 
@@ -40,7 +41,7 @@ def create_hedges(
     holed_reads_count = 0
     chimera_paired_read_count = 0
 
-    hedges: List[HEdge] = []
+    hedges: List[HyperEdge] = []
     hedges_weight = defaultdict(int)
     hedges_ids = defaultdict(set)
     for read_id, read in enumerate(tqdm(reads, desc='Create hedges from reads', disable=not verbose)):
@@ -78,7 +79,7 @@ def create_hedges(
             try:
                 created_hedges = []
                 for pos, nucl in zip(positions, nucls):
-                    created_hedges.append(HEdge.build([pos], [nucl], snp2genome, genome2snp, start_pos))
+                    created_hedges.append(build_hyper_edge([pos], [nucl], snp2genome, genome2snp, start_pos))
 
                 for hedge in created_hedges:
                     if hedge is not None:
@@ -119,21 +120,21 @@ def create_hedges(
     return hedges
 
 
-def select_hedges_by_length(hedges: List[HEdge], length_thresh: int) -> List[HEdge]:
+def select_hedges_by_length(hedges: List[HyperEdge], length_thresh: int) -> List[HyperEdge]:
     return [he for he in hedges if len(he) >= length_thresh]
 
 
 def select_hedges_by_relative_length(
-        hedges: List[HEdge],
+        hedges: List[HyperEdge],
         normalization_length: float,
-        relative_length_thresh: float) -> List[HEdge]:
+        relative_length_thresh: float) -> List[HyperEdge]:
     return [hedge
             for hedge in hedges
             if len(hedge) / normalization_length >= relative_length_thresh]
 
 
 def padding_contigs_with_major(
-        contigs: List[HEdge],
+        contigs: List[HyperEdge],
         major_ref: GenomeReference
 ) -> List[Haplotype]:
     haplos = []
@@ -153,7 +154,7 @@ def padding_contigs_with_major(
     return haplos
 
 
-def set_frequencies_by_weight_normalization(haplos: List[Haplotype], hedges: List[HEdge]):
+def set_frequencies_by_weight_normalization(haplos: List[Haplotype], hedges: List[HyperEdge]):
     assert len(haplos) == len(hedges), 'Must 1-to-1 relationship. '
 
     # Normalize by hedge length.

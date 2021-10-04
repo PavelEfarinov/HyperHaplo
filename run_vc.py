@@ -78,7 +78,7 @@ def main(
 
     # Run algo
     haplo_hedges, metrics_log = algo_merge_hedge_contigs(
-        hedges=dict_dict_hedges,
+        hedges=HyperGraph(dict_dict_hedges),
         target_snp_count=len(target_snps),
         error_probability=error_probability,
         verbose=verbose

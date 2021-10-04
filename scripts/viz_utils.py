@@ -10,8 +10,10 @@ from bisect import bisect_left, bisect_right
 from collections import Counter, defaultdict
 from more_itertools import pairwise
 
+from scripts.HyperEdge.HyperEdge import HyperEdge
+from scripts.HyperEdge.PairedHyperEdge import PairedHyperEdge
+from scripts.HyperEdge.SingleHyperEdge import SingleHyperEdge
 from scripts.data import SNP, Haplotype, get_snp_indeces
-from scripts.hedge import HEdge, SingleHEdge, PairedHEdge
 
 
 def reads_stats(bamfile_path: Path):
@@ -195,7 +197,7 @@ def plot_snv_count_by_coverage_threshold(indexed_snp_positions, lower=1, upper=1
     plt.show()
 
 
-def plot_hedges_type_distr(hedges: List[HEdge]):
+def plot_hedges_type_distr(hedges: List[HyperEdge]):
     edges_counter = Counter([type(he).__name__ for he in hedges])
     names, counts = zip(*edges_counter.items())
 
@@ -209,7 +211,7 @@ def plot_hedges_type_distr(hedges: List[HEdge]):
     plt.show()
 
 
-def plot_hedges_snp_count_distr(hedges: List[HEdge], lower=None, upper=None):
+def plot_hedges_snp_count_distr(hedges: List[HyperEdge], lower=None, upper=None):
     hedges_sizes = [he.snp_count for he in hedges]
 
     # ax.xaxis.set_major_locator(plt.MultipleLocator(5))
@@ -224,7 +226,7 @@ def plot_hedges_snp_count_distr(hedges: List[HEdge], lower=None, upper=None):
     plt.show()
 
 
-def plot_hedges_weight_distr(hedges: List[HEdge], lower=None, upper=None):
+def plot_hedges_weight_distr(hedges: List[HyperEdge], lower=None, upper=None):
     if lower and lower > len(hedges):
         print(f'No hedges: [{lower}, {upper}]')
         return
@@ -240,16 +242,16 @@ def plot_hedges_weight_distr(hedges: List[HEdge], lower=None, upper=None):
 
 
 def plot_hedges_length_distr(
-        hedges: List[HEdge],
+        hedges: List[HyperEdge],
         split_paired_hedges=False,
         lower=None,
         upper=None
 ):
     hedges_lengths = []
     for he in hedges:
-        if not split_paired_hedges or isinstance(he, SingleHEdge):
+        if not split_paired_hedges or isinstance(he, SingleHyperEdge):
             hedges_lengths.append(len(he))
-        elif split_paired_hedges and isinstance(he, PairedHEdge):
+        elif split_paired_hedges and isinstance(he, PairedHyperEdge):
             for l, r in [he.first_segment_in_genome(), he.second_segment_in_genome()]:
                 hedges_lengths.append(r - l + 1)
 
@@ -262,7 +264,7 @@ def plot_hedges_length_distr(
     plt.show()
 
 
-def plot_hedges_snp_count_and_weight_ratio(hedges: List[HEdge], weight_thresh_lower=20, weight_thresh_upper=None):
+def plot_hedges_snp_count_and_weight_ratio(hedges: List[HyperEdge], weight_thresh_lower=20, weight_thresh_upper=None):
     if weight_thresh_upper is None:
         weight_thresh_upper = max(he.weight for he in hedges)
 
@@ -278,7 +280,7 @@ def plot_hedges_snp_count_and_weight_ratio(hedges: List[HEdge], weight_thresh_lo
 
 
 def plot_coverage(
-        hedges: List[HEdge],
+        hedges: List[HyperEdge],
         reference_len: int,
         weight_thresh=1,
         split_paired_hedges=False,
@@ -289,13 +291,13 @@ def plot_coverage(
     hedges = [he for he in hedges if he.weight >= weight_thresh]
 
     for he in hedges:
-        if not split_paired_hedges or isinstance(he, SingleHEdge):
+        if not split_paired_hedges or isinstance(he, SingleHyperEdge):
             coverage[he.begin_in_genome()] += 1
             if he.end_in_genome() + 1 < reference_len:
                 # if hedges ends at the end of the reference then there is no `end` dec position.
                 # So after coverage evaluation acc may be more than 0.
                 coverage[he.end_in_genome() + 1] -= 1
-        elif split_paired_hedges and isinstance(he, PairedHEdge):
+        elif split_paired_hedges and isinstance(he, PairedHyperEdge):
             for l, r in [he.first_segment_in_genome(), he.second_segment_in_genome()]:
                 coverage[l] += 1
                 if r + 1 < reference_len:
@@ -341,7 +343,7 @@ class HyperGraphViz:
         self.segments[segment]['alleles'][segment_alleles]['count'] += 1
         self.segments[segment]['alleles'][segment_alleles]['w'] += weight
 
-    def add_hedge(self, hedge: HEdge, w_threshold=1):
+    def add_hedge(self, hedge: HyperEdge, w_threshold=1):
         weight = hedge.weight
         # TODO support of SingleHEdge and PairedHEdges
         snv_alleles = list(zip(hedge.positions, hedge.nucls))
