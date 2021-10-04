@@ -199,11 +199,7 @@ def hyper_edges_union(he1: HyperEdge, he2: HyperEdge):
                 i1 += 1
                 i2 += 1
 
-            if len(positions) and positions[-1] + 1 != pos:
-                new_positions.append(positions)
-                new_nucls.append(nucls)
-                positions = []
-                nucls = []
+            append_new_positions_if_ended(pos, positions, nucls, new_positions, new_nucls)
 
             positions.append(pos)
             nucls.append(nucl)
@@ -216,38 +212,10 @@ def hyper_edges_union(he1: HyperEdge, he2: HyperEdge):
             i2 = 0
 
     # add rest of he1
-    while idx1 < len(pos_segments1):
-        while i1 < len(pos_segments1[idx1]):
-            pos = pos_segments1[idx1][i1]
-            nucl = nucl_segments1[idx1][i1]
-            if len(positions) and positions[-1] + 1 != pos:
-                new_positions.append(positions)
-                new_nucls.append(nucls)
-                positions = []
-                nucls = []
-
-            positions.append(pos)
-            nucls.append(nucl)
-            i1 += 1
-        idx1 += 1
-        i1 = 0
+    process_rest_of_edge(idx1, i1, pos_segments1, nucl_segments1, positions, nucls, new_positions, new_nucls)
 
     # add rest of he2
-    while idx2 < len(pos_segments2):
-        while i2 < len(pos_segments2[idx2]):
-            pos = pos_segments2[idx2][i2]
-            nucl = nucl_segments2[idx2][i2]
-            if len(positions) and positions[-1] + 1 != pos:
-                new_positions.append(positions)
-                new_nucls.append(nucls)
-                positions = []
-                nucls = []
-
-            positions.append(pos)
-            nucls.append(nucl)
-            i2 += 1
-        idx2 += 1
-        i2 = 0
+    process_rest_of_edge(idx2, i2, pos_segments2, nucl_segments2, positions, nucls, new_positions, new_nucls)
 
     if len(positions):
         new_positions.append(positions)
@@ -268,6 +236,27 @@ def hyper_edges_union(he1: HyperEdge, he2: HyperEdge):
     new_hedge.edge_ids = he1.edge_ids.hyper_edges_union(he2.edge_ids)
     new_hedge.frequency = min(he1.frequency, he2.frequency)
     return new_hedge
+
+
+def append_new_positions_if_ended(current_position, current_positions, current_nucl, new_positions, new_nucls):
+    if len(current_positions) and current_positions[-1] + 1 != current_position:
+        new_positions.append(current_positions)
+        new_nucls.append(current_nucl)
+        current_positions.clear()
+        current_nucl.clear()
+
+
+def process_rest_of_edge(idx, i, pos_segments, nucl_segments, positions, nucls, new_positions, new_nucls):
+    while idx < len(pos_segments):
+        while i < len(pos_segments[idx]):
+            pos = pos_segments[idx][i]
+            nucl = nucl_segments[idx][i]
+            append_new_positions_if_ended(pos, positions, nucls, new_positions, new_nucls)
+            positions.append(pos)
+            nucls.append(nucl)
+            i += 1
+        idx += 1
+        i = 0
 
 
 def coverages_union(cov1: Coverage, cov2: Coverage) -> Coverage:
