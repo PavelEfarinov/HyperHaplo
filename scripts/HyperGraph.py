@@ -1,13 +1,17 @@
+from copy import deepcopy
 from typing import Dict
 
 from scripts.HyperEdge.HyperEdge import HyperEdge
-from scripts.HyperEdge.hyper_utils import get_distance_between_hedges, coverages_union
+from scripts.HyperEdge.hyper_utils import get_distance_between_hedges, coverages_union, hyper_edges_union
 from scipy.stats import binom
+
+from scripts.algo import get_max_pair, check_leftovers_distribution
 
 
 class HyperGraph:
     def __init__(self, hedges: Dict[frozenset, Dict[str, HyperEdge]]):
         self.hedges = hedges
+        self.ever_created_hedges = deepcopy(hedges)
 
     def __getitem__(self, key):
         return self.hedges[key]
@@ -55,8 +59,7 @@ class HyperGraph:
         for key in keys_to_delete:
             del self.hedges[key]
 
-    def get_pairs(self,
-                  ever_created_hedges):
+    def get_pairs(self):
         int_sets = list(k for k in self.hedges.keys() if len(self.hedges[k]) > 0)
         interesting_snp_sets = set(k for k in self.hedges.keys() if len(self.hedges[k]) > 0)
         found_any_new_conditions = False
@@ -86,10 +89,62 @@ class HyperGraph:
                             new_hedge = coverages_union(hedge1, hedge2)
                             new_h_nucls = new_hedge.nucls
                             frozen_positions = frozenset(new_hedge.positions)
-                            if frozen_positions not in ever_created_hedges.hedges or new_h_nucls not in \
-                                    ever_created_hedges[
+                            if frozen_positions not in self.ever_created_hedges or new_h_nucls not in \
+                                    self.ever_created_hedges[
                                         frozen_positions]:
                                 hedge1.used = False
                                 hedge2.used = False
                                 pairs.append((hedge1, hedge2))
         return pairs if found_any_new_conditions else []
+
+    def merge_all_pairs(self, target_snp_count, error_probability, verbose):
+        pairs = self.get_pairs()
+        old_hedges = None
+        haplo_hedges = []
+        while len(pairs) > 0:
+            print('Iteration started, pairs count: ', len(pairs))
+            if verbose:
+                print('Current hedges')
+                for s, h in self.hedges.items():
+                    print(s)
+                    print(h)
+
+                print('-------------printing pairs---------')
+                for pair in pairs:
+                    print(pair)
+
+            pair = get_max_pair(pairs)
+
+            index = pairs.index(pair)
+            he1 = pair[0]
+            he2 = pair[1]
+            if verbose:
+                print(f'Merging {pair[0]} and {pair[1]}')
+            new_hedge = hyper_edges_union(he1, he2)
+            freq1, freq2, freq_new = check_leftovers_distribution(he1.weight, he1.frequency, he2.weight, he2.frequency)
+            new_hedge.frequency = freq_new * 100
+            new_hedge.weight = (1 - freq1) * he1.weight + (1 - freq2) * he2.weight
+            if len(new_hedge.positions) == target_snp_count:
+                if new_hedge.frequency > error_probability * 100:
+                    haplo_hedges.append(new_hedge)
+            else:
+                new_h_nucls = new_hedge.nucls
+                frozen_positions = frozenset(new_hedge.positions)
+                if frozen_positions not in self.ever_created_hedges or new_h_nucls not in self.ever_created_hedges[
+                    frozen_positions]:
+                    self.hedges[frozen_positions][new_h_nucls] = new_hedge
+                    self.ever_created_hedges[frozen_positions][new_h_nucls] = new_hedge
+                else:
+                    self.remove_leftovers(error_probability)
+                    pairs = self.get_pairs(self.ever_created_hedges)
+                    continue
+            pairs[index][0].weight *= freq1 * 100 / pairs[index][0].frequency
+            pairs[index][1].weight *= freq2 * 100 / pairs[index][1].frequency
+            pairs[index][0].frequency = freq1 * 100
+            pairs[index][1].frequency = freq2 * 100
+            # print(pairs[i])
+            self[frozenset(pairs[index][0].positions)][he1.nucls] = pairs[index][0]
+            self[frozenset(pairs[index][1].positions)][he2.nucls] = pairs[index][1]
+            self.remove_leftovers(error_probability)
+            pairs = self.get_pairs(self.ever_created_hedges)
+        return haplo_hedges

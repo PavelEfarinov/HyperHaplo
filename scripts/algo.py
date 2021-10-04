@@ -56,7 +56,6 @@ def algo_merge_hedge_contigs(
         verbose: bool = False,
         debug: bool = False
 ) -> Tuple[List[HyperEdge], Mapping[str, List]]:
-    ever_created_hedges = deepcopy(hedges)
     metrics = defaultdict(list)
     if verbose:
         print('----Algo started----')
@@ -65,54 +64,8 @@ def algo_merge_hedge_contigs(
 
     hedges.remove_referencing_hyperedges()
 
-    pairs = hedges.get_pairs(ever_created_hedges)
-    old_hedges = None
-    haplo_hedges = []
-    while len(pairs) > 0:
-        print('Iteration started, pairs count: ', len(pairs))
-        if verbose:
-            print('Current hedges')
-            for s, h in hedges.items():
-                print(s)
-                print(h)
+    haplo_hedges = hedges.merge_all_pairs(target_snp_count, error_probability, verbose)
 
-            print('-------------printing pairs---------')
-            for pair in pairs:
-                print(pair)
-
-        pair = get_max_pair(pairs)
-
-        index = pairs.index(pair)
-        he1 = pair[0]
-        he2 = pair[1]
-        if verbose:
-            print(f'Merging {pair[0]} and {pair[1]}')
-        new_hedge = hyper_edges_union(he1, he2)
-        freq1, freq2, freq_new = check_leftovers_distribution(he1.weight, he1.frequency, he2.weight, he2.frequency)
-        new_hedge.frequency = freq_new * 100
-        new_hedge.weight = (1 - freq1) * he1.weight + (1 - freq2) * he2.weight
-        if len(new_hedge.positions) == target_snp_count:
-            if new_hedge.frequency > error_probability * 100:
-                haplo_hedges.append(new_hedge)
-        else:
-            new_h_nucls = new_hedge.nucls
-            frozen_positions = frozenset(new_hedge.positions)
-            if frozen_positions not in ever_created_hedges or new_h_nucls not in ever_created_hedges[frozen_positions]:
-                hedges[frozen_positions][new_h_nucls] = new_hedge
-                ever_created_hedges[frozen_positions][new_h_nucls] = new_hedge
-            else:
-                hedges.remove_leftovers(error_probability)
-                pairs = hedges.get_pairs(ever_created_hedges)
-                continue
-        pairs[index][0].weight *= freq1 * 100 / pairs[index][0].frequency
-        pairs[index][1].weight *= freq2 * 100 / pairs[index][1].frequency
-        pairs[index][0].frequency = freq1 * 100
-        pairs[index][1].frequency = freq2 * 100
-        # print(pairs[i])
-        hedges[frozenset(pairs[index][0].positions)][he1.nucls] = pairs[index][0]
-        hedges[frozenset(pairs[index][1].positions)][he2.nucls] = pairs[index][1]
-        hedges.remove_leftovers(error_probability)
-        pairs = hedges.get_pairs(ever_created_hedges)
     print('----Finished algo----')
     print(haplo_hedges)
     print('----Recounting frequencies----')
@@ -125,7 +78,6 @@ def algo_merge_hedge_contigs(
     for haplo in haplo_hedges:
         print(haplo)
     return haplo_hedges, metrics
-
 
 def get_max_pair(pairs):
     return max(pairs, key=lambda x: (get_intersection_snp_length(x),
